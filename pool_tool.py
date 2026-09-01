@@ -1534,9 +1534,12 @@ class PoolChemistryApp:
         btns = tk.Frame(self.root)
         btns.pack(pady=15)
         
-        tk.Button(btns, text="Calculate", command=self.calculate, bg="#4CAF50", fg="white", 
+        tk.Button(btns, text="Calculate", command=self.calculate, bg="#4CAF50", fg="white",
                   font=("Arial", 10, "bold")).pack(side="left", padx=5)
-        tk.Button(btns, text="History", command=self.view_history, bg="#2196F3", fg="white").pack(side="left", padx=5)
+        history_btn = tk.Button(btns, text="History", command=self.view_history, bg="#2196F3", fg="white")
+        history_btn.pack(side="left", padx=5)
+        history_path = self.app_state.config.get('history_path', '')
+        ToolTip(history_btn, f"Calculations save to:\n{history_path}")
         tk.Button(btns, text="Reset", command=self.reset_defaults, bg="#f44336", fg="white").pack(side="left", padx=5)
     
     def create_status_bar(self):
@@ -4408,22 +4411,26 @@ class PoolChemistryApp:
         """View history file."""
         path = self.app_state.config.get('history_path')
         if not path or not os.path.exists(path):
-            messagebox.showinfo("History", "No history file found.")
+            messagebox.showinfo(
+                "History",
+                f"No history file found yet.\n\nCalculations will be saved to:\n{path or '(no path configured)'}"
+            )
             return
-        
+
         try:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
-            
+
             win = tk.Toplevel(self.root)
             win.title("History")
             win.geometry("700x500")
-            
+
+            tk.Label(win, text=f"📁 Saved to: {path}", fg="#1565C0", font=("Arial", 9, "bold"),
+                     anchor="w", justify="left", wraplength=680).pack(side="top", anchor="w", padx=5, pady=(5, 0))
+
             history_text = ScrolledText(win, wrap="word")
             history_text.insert(tk.END, content)
             history_text.pack(fill="both", expand=True)
-            
-            tk.Label(win, text=f"File: {path}", fg="gray", font=("Arial", 8)).pack(side="bottom", anchor="w")
         except Exception as e:
             messagebox.showerror("Error", f"Cannot read history: {e}")
     
