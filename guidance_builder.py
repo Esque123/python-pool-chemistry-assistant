@@ -46,21 +46,6 @@ class GuidanceBuilder:
         OutputSection.FOOTER,
     ]
     
-    SECTION_TITLES = {
-        OutputSection.HEADER: "POOL CHEMISTRY ASSISTANT",
-        OutputSection.PARAMETERS: "POOL PARAMETERS",
-        OutputSection.MODE: "OPERATING MODE",
-        OutputSection.CHEMISTRY_ANALYSIS: "CHEMISTRY ANALYSIS",
-        OutputSection.SLAM_DOSES: "SLAM CHLORINE DOSES",
-        OutputSection.SLAM_MAINTENANCE: "SLAM MAINTENANCE",
-        OutputSection.KEY_MILESTONE: "KEY MILESTONE",
-        OutputSection.DOSEAGES: "CHEMICAL DOSES",
-        OutputSection.PUMP_GUIDANCE: "PUMP GUIDANCE",
-        OutputSection.WATER_CLARITY: "WATER CLARITY",
-        OutputSection.MAINTENANCE_TIPS: "MAINTENANCE TIPS",
-        OutputSection.FOOTER: "END OF REPORT",
-    }
-    
     SECTION_EMOJIS = {
         OutputSection.HEADER: "",
         OutputSection.PARAMETERS: "",
@@ -410,7 +395,7 @@ class GuidanceBuilder:
         try:
             lines = [
                 f"{'='*47}",
-                f"{self.SECTION_EMOJIS[OutputSection.FOOTER]} {self.SECTION_TITLES[OutputSection.FOOTER]}",
+                f"{self.SECTION_EMOJIS[OutputSection.FOOTER]} END OF REPORT",
                 f"{'='*47}"
             ]
             self._add_lines(OutputSection.FOOTER, lines)

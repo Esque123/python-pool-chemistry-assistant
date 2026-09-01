@@ -15,7 +15,7 @@
   },
 
   "project": "Pool Chemistry Assistant",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "status": "Production-ready desktop app for pool water chemistry analysis with SLAM lifecycle detection, smart recommendations, dilution calculator, and comprehensive dosing guidance.",
 
   "core_features": {
@@ -136,10 +136,10 @@
   },
 
   "recent_fixes": [
+    "Code review cleanup: removed unreachable dead-code branches in detect_slam_context() (leftover milky/algae checks that could never fire, since those clarities always return earlier in the function); removed unused GuidanceBuilder.SECTION_TITLES dict (only its FOOTER entry was ever read, inlined as a literal); wired the previously-orphaned validate_inputs() into calculate() so unusual volume/HCl%/bleach%/cal-hypo%/pump-flow values now surface a warning dialog instead of being silently ignored. Verified detect_slam_context() unchanged across 31k input combinations before/after",
     "Set up git for the project (repo at github.com/Esque123/python-pool-chemistry-assistant); consolidated pool_tool_V6-V31.py and guidance_builderv30.py into pool_tool.py / guidance_builder.py; fixed ai_instructions after it was accidentally overwritten with AI Dungeon Master content",
     "Fixed stale water clarity bug: after refilling the pool post-winter, the app carried forward a months-old 'milky' clarity setting from pool_config.txt and misreported fresh-fill readings as post-SLAM recovery. Added check_stale_state() (STALE_STATE_DAYS_THRESHOLD=14 days), which compares the previously-unused last_seen_date to now and offers to reset clarity/SLAM/overnight-test to defaults when the saved state is likely stale",
     "Implemented centralized safety calculator (calculate_safe_doses) for acid, chlorine, soda ash, baking soda",
-    "Added intelligent dose splitting for large acid treatments based on pool volume",
-    "Fixed overnight test auto-reset logic with proper rules (SLAM mode off, algae present, clear water)"
+    "Added intelligent dose splitting for large acid treatments based on pool volume"
   ]
 }

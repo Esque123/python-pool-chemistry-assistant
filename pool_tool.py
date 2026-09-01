@@ -2557,21 +2557,14 @@ class PoolChemistryApp:
         # Handle milky water (dead algae)
         if water_clarity == "milky":
             if chlorine is not None:
-                # Calculate safe ranges - handle None CYA case here
+                # Calculate safe maintenance ceiling - handle None CYA case here
                 if cya is None:
-                    # Use safe defaults for CYA unknown
-                    maintenance_min = UNKNOWN_CYA['SAFE_MAINTENANCE_MIN']
                     maintenance_max = UNKNOWN_CYA['SAFE_MAINTENANCE_MAX']
                 elif cya == 0:
-                    maintenance_min = 1.0
                     maintenance_max = 3.0
-                elif cya < 30:
-                    maintenance_min = cya * 0.075
-                    maintenance_max = cya * 0.15
                 else:
-                    maintenance_min = cya * 0.075
                     maintenance_max = cya * 0.15
-                
+
                 # If chlorine is near maintenance levels, we're in post-SLAM
                 if chlorine <= maintenance_max * 1.5:
                     if overnight_test == "failed":
@@ -2584,21 +2577,14 @@ class PoolChemistryApp:
             else:
                 # Milky but no chlorine reading - can't determine accurately
                 return 'post_slam'  # Best guess
-        
-        # Rest of your existing logic for other cases
-        if water_clarity in ["green_algae", "black_algae"]:
-            return 'pre_slam'
-        
-        temp_cya = cya
-        
-        if cya is None:
-            if water_clarity in ["green_algae", "black_algae"]:
-                return 'pre_slam'
-            temp_cya = UNKNOWN_CYA['ASSUMPTION_FOR_SLAM_DETECTION']
-        
+
+        # From here, water_clarity is crystal_clear, slightly_cloudy, or cloudy
+        # (algae and milky clarities always return above)
+        temp_cya = cya if cya is not None else UNKNOWN_CYA['ASSUMPTION_FOR_SLAM_DETECTION']
+
         if chlorine is None or temp_cya is None:
             return 'normal'
-        
+
         if temp_cya == 0:
             shock_level = 10.0
             maintenance_min = 1.0
@@ -2611,28 +2597,14 @@ class PoolChemistryApp:
             shock_level = temp_cya * 0.4
             maintenance_min = temp_cya * 0.075
             maintenance_max = temp_cya * 0.15
-        
-        if water_clarity == "milky":
-            if chlorine is not None and chlorine <= maintenance_max * 1.5:
-                if pH is not None and pH >= 7.2 and pH <= 7.8:
-                    return 'post_slam'
-        
+
         if chlorine >= shock_level * 0.9:
             return 'during_slam'
-        
-        if water_clarity in ["green_algae", "black_algae"]:
-            if chlorine < shock_level * 0.9:
-                return 'pre_slam'
-            else:
-                return 'during_slam'
-        
-        if water_clarity == "milky" and chlorine <= maintenance_max * 1.5:
-            return 'post_slam'
-        
+
         if chlorine > maintenance_max * 2 and chlorine < shock_level:
             if pH is not None and pH < 7.4:
                 return 'post_slam'
-        
+
         risk_factors = 0
         if chlorine is not None and chlorine < maintenance_min:
             risk_factors += 1
@@ -4286,6 +4258,10 @@ class PoolChemistryApp:
                         pump = None
                 except ValueError:
                     messagebox.showwarning("Warning", "Invalid pump flow - ignoring")
+
+            input_warnings = self.validate_inputs(volume, hcl, bleach, pump, cal_hypo_percent)
+            if input_warnings:
+                messagebox.showwarning("Check Your Inputs", "\n".join(input_warnings))
 
             water_clarity_display = self.clarity_var.get()
             water_clarity = get_clarity_internal_key(water_clarity_display)
