@@ -40,6 +40,11 @@ CALCULATION_CONSTANTS = {
 }
 
 # ==============================
+# STALE STATE DETECTION
+# ==============================
+STALE_STATE_DAYS_THRESHOLD = 14  # Gap since last_seen_date that triggers a "still accurate?" prompt
+
+# ==============================
 # UNKNOWN CYA CONSTANTS
 # ==============================
 UNKNOWN_CYA = {
@@ -1940,9 +1945,63 @@ class PoolChemistryApp:
                 
     def check_initial_state_transition(self):
         """Check for state transitions when app starts."""
+        if self.check_stale_state():
+            return
         transition = self.detect_state_transition()
         if transition['transition_detected']:
             self.ask_about_overnight_test(transition)
+
+    def check_stale_state(self):
+        """
+        Warn if the saved water clarity/SLAM state is old enough to likely be stale
+        (e.g. the pool was drained over winter and refilled since the last session).
+        Returns True if the prompt fired, so the caller can skip the normal
+        transition check for this run.
+        """
+        curr_clarity = get_clarity_internal_key(self.clarity_var.get())
+        if curr_clarity == 'crystal_clear':
+            return False
+
+        last_seen = self.app_state.config.get('last_seen_date')
+        if not last_seen:
+            return False
+
+        try:
+            last_seen_dt = datetime.strptime(last_seen, '%Y-%m-%d')
+        except ValueError:
+            return False
+
+        days_gap = (datetime.now() - last_seen_dt).days
+        if days_gap < STALE_STATE_DAYS_THRESHOLD:
+            return False
+
+        reset = messagebox.askyesno(
+            "Long Gap Since Last Session",
+            f"It's been {days_gap} days since your last recorded session ({last_seen}).\n\n"
+            f"Your saved water clarity is still \"{get_clarity_display_name(curr_clarity)}\" from back then.\n\n"
+            "If conditions changed since -- the pool was drained, refilled with fresh water, "
+            "or sat unused over winter -- that saved state no longer applies.\n\n"
+            "Reset water clarity, SLAM mode, and overnight test to fresh defaults now?"
+        )
+
+        if reset:
+            self.clarity_combo.set(get_clarity_display_name('crystal_clear'))
+            self.app_state.config['water_clarity'] = 'crystal_clear'
+            self.slam_mode_var.set(False)
+            self.app_state.config['previous_slam_mode'] = False
+            if self.overnight_test_var:
+                self.overnight_test_var.set('not_tested')
+            self.app_state.config['overnight_test'] = 'not_tested'
+            self.update_clarity_desc()
+            self.update_slam_status()
+            self._save_current_state()
+            messagebox.showinfo(
+                "Reset to Fresh",
+                "✅ Water clarity, SLAM mode, and overnight test reset to defaults.\n\n"
+                "Enter your current readings and Calculate as normal."
+            )
+
+        return True
     
     def safe_open_dilution_calculator(self):
         """Open dilution calculator only when main window is ready."""
