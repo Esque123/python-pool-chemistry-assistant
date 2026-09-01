@@ -13,6 +13,9 @@ pool_config.txt
 dilution_config.txt
 pool_history.txt
 
+# Scratch copy of the cross-project context.json template, not this project's own doc
+template_context.json
+
 # OS
 .DS_Store
 Thumbs.db
