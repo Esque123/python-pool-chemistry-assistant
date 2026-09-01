@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+
+# PyInstaller
+build/
+dist/
+
+# Runtime / user data (personal config & history, not source)
+pool_config.txt
+dilution_config.txt
+pool_history.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

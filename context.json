@@ -1,0 +1,145 @@
+{
+  "purpose": "AI context for Intelligent Pool Chemistry Assistant. Keep PRUNED - last 3 fixes only, concise descriptions. Request specific code files when implementation details needed.",
+
+  "ai_instructions": {
+    "_meta": "This section is instructions to the AI, functionally equivalent to a _meta field even though it's broken into multiple named fields (ai_usage, ai_maintenance, etc.) for readability -- the same rule applies: every field in this section, including this one, is set by the user and must NEVER be modified, rewritten, summarised, or removed by an AI, even during routine end-of-session updates elsewhere in the file. New ai_* fields may be added when the user explicitly asks for a new standing instruction. Existing ones are never touched without an explicit request to change that specific instruction -- not because a session judges the wording outdated, redundant, or removable.",
+    "ai_usage": "Use this context to understand the intended architecture before suggesting implementation. Reference file_structure for the planned layout -- nothing under it exists on disk yet unless a recent_fixes entry says otherwise. Check known_limitations and recommended_improvements before assuming a design decision is settled, and use recommended_improvements as a prioritized task list when asked for next steps. Ask for specific files from the structure below rather than assuming code locations once implementation starts. When updating this file after a session, keep only the 10 most recent entries in recent_fixes -- remove the oldest to prevent bloat (see ai_maintenance).",
+    "ai_maintenance": "At the end of each session, offer to update this file. Update project.version (increment patch for fixes, minor for new features, major for architecture changes) -- but only once per session unless the user explicitly starts a new, distinct piece of work; related follow-ups, confirmations, or closures that land later in the same sitting belong in that same version bump and the same recent_fixes entry, not a new one. Update project.description if the app's purpose or scope changes. Add a recent_fixes entry summarising what changed, then prune the list to the most recent 10 entries (newest-first order), dropping the oldest -- full history stays recoverable via git log on this file, so nothing is truly lost. Update any sections that were affected by the session's changes. Remove resolved known_limitations entries rather than marking them resolved in place -- the resolution narrative belongs in recent_fixes, not as a longer-lived entry elsewhere. When providing updates, give only the targeted fields that changed -- do not rewrite or reprint the entire file. Present the changed fields in the same order they appear in the actual file being updated, top to bottom, rather than grouping by perceived importance. Entirely new fields or sections that don't yet exist in the file have no position to match -- present those last.",
+    "ai_current_state_vs_history": "The current-state sections (core_features, architecture_notes, key_rules, file_structure, critical_config_notes, known_limitations, etc.) must describe ONLY what the design currently is -- the present plan, the present reason it's built that way. They are NOT a logbook. The chronological story of what changed, when, and why -- dated edit history, superseded approaches, investigation narratives, 'was X, now Y' transitions -- belongs exclusively in recent_fixes. When updating a current-state section, REPLACE the outdated description with the new current state rather than appending the change onto the end; the fact that it changed is captured by the corresponding recent_fixes entry, not by a trail left inside the section. The one deliberate exception is a not-yet-verified or provisional status ('applied but not yet confirmed working'), which IS current-state information a future session needs and belongs in known_limitations until resolved. If a current-state section has accumulated embedded history over past sessions, trimming it back to pure current-state during an unrelated update is encouraged, not a violation of the 'only touch what changed' rule.",
+    "ai_context_updates": "When updating this file at session end: if the AI has direct read/write access to this repository's files, apply the changes directly with that tool rather than only printing them in chat -- still summarise what changed, labelled by key name, so the user can review it, but the file on disk should already reflect the update by the time the summary is given. If the AI does NOT have direct file access, present only the sections that changed or need to be added, clearly labelled by their key name, and let the user manually apply them. Either way: never rewrite the entire file when only a few fields changed, never touch '_meta' fields, and follow ai_maintenance's other rules (version bump discipline, current-state-vs-history separation, recent_fixes trimmed to 10, field order when presenting for manual apply).",
+    "ai_git_workflow": "Every git commit/push to this repository's code must update ai_dungeon_master.json in the same commit -- version bump plus a recent_fixes entry, per ai_maintenance. Never push a code change without the spec doc updated and included in the same push. CLAUDE.md at the repo root exists specifically to surface this file and this rule at the start of every session.",
+    "ai_model_recommendation": "At the start of every session, after reading this file, recommend a Claude model and effort level before any work begins. Base the recommendation on: (1) whether the session is spec/design work vs. real implementation, (2) complexity implied by recommended_improvements.immediate, (3) whether the work touches the narrative-engine JSON contract (schema correctness matters) or is routine client UI work. Format: one short paragraph stating the recommended model, effort level, and the reasoning. Do this before asking for any files or starting any task.",
+    "ai_conventions": "Fields named '_meta' are structural instructions to the AI about how to interpret the section they belong to. They are NOT placeholders for project data and must NEVER be modified, summarised, or replaced. When updating an existing version of this file, leave every '_meta' value completely untouched. If you find yourself writing project-specific content into a '_meta' field, stop -- you are making an error.",
+    "ai_secrets_handling": "The whole point of this architecture is that the Anthropic API key never reaches the client -- see key_rules.api_keys_never_on_client. When drafting any Edge Function / VPS relay code, Supabase config, or .env example, never hardcode a live key inline in content pasted into chat or written directly into a tracked file. If a secret is ever pasted into chat regardless of cause, treat it as compromised and rotate it.",
+    "ai_prune_on_drift": "At the start of a session, after reading this file, assess whether any current-state section has drifted into logbook style -- embedded dated entries, stacked 'UPDATED <date>:' or 'was X, now Y' fragments, multi-paragraph fields where most of the content is history rather than present state, or the same change narrated both in a section and in recent_fixes. If it has, proactively tell the user the file looks like it has accreted history in place. Always surface this and get explicit approval before pruning -- this applies even to an AI with direct file access to this repository; noticing drift is not itself permission to fix it, the same as ai_context_updates' direct-edit permission is not permission to prune unprompted or silently fold it into unrelated work. Once approved, prune it back to current-state (delegating the history to recent_fixes and cross-references) the same disciplined way a dedicated cleanup session would -- one section at a time. An AI with direct file access applies the pruned fields directly (this file is git-tracked, so no separate backup is needed -- git history already covers that); an AI without file access instead presents each trimmed field for the user to review and apply by hand. This is a safeguard against exactly the drift that ai_current_state_vs_history exists to prevent -- the two work together: one keeps clean files clean, the other recovers files that were already dirtied before the rule existed.",
+    "ai_token_warning": "Periodically assess whether the conversation is getting long (many file pastes, long back-and-forth, large code blocks). When it feels like the context window is getting full, proactively flag it to the user. If the AI has direct file access, apply any pending updates to this file immediately rather than waiting for session end -- the file is the persistent source of truth, so nothing is lost if the conversation is abandoned, compacted, or a fresh one is started, and the user doesn't need to manually copy/paste anything. If the AI does NOT have direct file access, remind the user to copy the latest content of this file to their local copy and start a fresh conversation with it attached. Either way: do not wait until quality degrades -- flag it early while there is still enough context to update the file cleanly.",
+    "ai_model_recheck": "Mid-session, if the actual work turns out significantly more complex than recommended_improvements.immediate implied -- for example, a bug traced back to an architectural issue, unexpected interactions between systems, or a gap in key_rules.deterministic_mechanics_only_in_app_code discovered during implementation -- pause and flag it. State the original recommendation, explain what changed, and suggest whether to upgrade model or effort level before continuing. Do not silently continue at the original settings if the complexity has materially increased."
+  },
+
+  "project": "Pool Chemistry Assistant",
+  "version": "V31",
+  "status": "Production-ready desktop app for pool water chemistry analysis with SLAM lifecycle detection, smart recommendations, dilution calculator, and comprehensive dosing guidance.",
+
+  "core_features": {
+    "_meta": "List each major feature as a single key-value pair. The key is a short feature name, the value describes what it does and where its entry point is. Focus on the what and where — the how lives in the code.",
+    "slam_detection": "Automatically detects pre-SLAM, during-SLAM, post-SLAM, and post-SLAM final stages based on water clarity, chlorine levels, CYA, and overnight test results.",
+    "state_tracking": "Remembers previous session states, detects suspicious transitions (algae→milky without overnight test), asks intelligent questions.",
+    "dilution_calculator": "Standalone tool for testing high chlorine levels (>10 ppm). Configurable test kit range, auto-copies results to main field.",
+    "chemistry_calculations": "pH, TA, chlorine, CYA, calcium hardness with proper dosing based on pool volume and chemical concentrations.",
+    "overnight_test": "Tracks FC loss test status (not_tested/passed/failed) with automatic reset logic based on SLAM mode and water clarity.",
+    "history": "Saves all calculations with timestamped entries to pool_history.txt",
+    "guidance_builder": "Structured output formatting using GuidanceBuilder class for consistent, professional recommendations."
+  },
+
+  "calculation_constants": {
+    "acid_ph_dose": "120 ml 31.45% HCl to drop pH 0.1 in 10,000L",
+    "soda_ash_ph_dose": "100 g to raise pH 0.1 in 10,000L",
+    "acid_ta_dose": "120 ml 31.45% HCl to drop TA 10 ppm in 10,000L",
+    "baking_soda_ta_dose": "180 g to raise TA 10 ppm in 10,000L",
+    "liquid_chlorine_dose": "80 ml 12.5% bleach → +1 ppm FC in 10,000L",
+    "cal_hypo_dose": "15.38 g 65% cal-hypo to +1 ppm FC in 10,000L",
+    "cya_dose": "10 g to raise CYA 1 ppm in 10,000L",
+    "calcium_dose": "11 g CaCl2 to raise CH 1 ppm in 10,000L"
+  },
+
+  "target_ranges": {
+    "pH": "7.2-7.8 (target 7.5)",
+    "TA": "80-120 ppm (target 100)",
+    "Cl": "1-3 ppm (CYA-dependent)",
+    "CYA": "30-50 ppm",
+    "CH": "200-400 ppm"
+  },
+
+  "water_clarity": {
+    "options": [
+      "crystal_clear",
+      "slightly_cloudy",
+      "cloudy",
+      "milky",
+      "green_algae",
+      "black_algae"
+    ],
+    "milky_note": "Typical after SLAM (dead algae) - focus on filtration, not chlorine"
+  },
+
+  "slam_lifecycle": {
+    "pre_slam": "Algae detected, chlorine below shock level",
+    "during_slam": "Chlorine at/above shock level, actively killing algae",
+    "post_slam": "Water milky, chlorine dropping toward maintenance",
+    "post_slam_final": "Overnight test passed, focusing on filtration"
+  },
+
+  "file_structure": {
+    "_meta": "List every file that contains meaningful logic. For each, describe its role and key classes or functions it owns.",
+    "pool_tool.py": "Main application file. Contains PoolChemistryApp, DilutionCalculatorWindow, AppState, ToolTip classes.",
+    "guidance_builder.py": "GuidanceBuilder class for structured output formatting. Handles bullet points, sections, emojis, and clean formatting.",
+    "pool_config.txt": "Configuration file (auto-created): pool volume, chemical percentages, water clarity, overnight test status, previous state.",
+    "pool_history.txt": "History file with timestamped calculation results."
+  },
+
+  "key_classes": {
+    "PoolChemistryApp": "Main application. Handles UI, config loading/saving, calculation orchestration, SLAM detection.",
+    "DilutionCalculatorWindow": "Standalone dilution calculator. Configurable test kit range, auto-saves settings, auto-fills chlorine field.",
+    "AppState": "Runtime state container. Stores config, window references, UI component references.",
+    "GuidanceBuilder": "Output formatter. Builds structured recommendations with proper sections and emojis.",
+    "ToolTip": "Creates tooltips for UI widgets."
+  },
+
+  "key_methods": {
+    "adjust_pool": "Main analysis engine. Returns formatted recommendations using GuidanceBuilder.",
+    "detect_slam_context": "Determines SLAM lifecycle stage based on parameters.",
+    "get_slam_guidance_structured": "Returns structured SLAM guidance with doses, maintenance, protocols.",
+    "calculate_safe_doses": "Centralized safety calculator for chemical doses. Handles splitting, warnings.",
+    "_calculate_ph_alkalinity_combined_actions": "Combined pH/TA logic with centralized safety.",
+    "_calculate_ph_only_actions": "Primary source for pH chemical doses.",
+    "calculate_chlorine_addition_options": "Returns structured chlorine dose data for builder."
+  },
+
+  "key_rules": [
+    "pH readings are INACCURATE when FC > 10 ppm (SLAM mode shows warning)",
+    "Overnight test auto-resets: off when SLAM mode off, or when algae present, or clear water normal mode",
+    "Milky water + passed overnight test = post-SLAM final stage (focus on filtration)",
+    "CYA dosing: complete SLAM FIRST, THEN add CYA (adding mid-SLAM raises shock level)",
+    "Large acid doses: auto-split into multiple doses based on pool volume (1.5% threshold)",
+    "Large chlorine raises: auto-split into multiple doses during maintenance (SLAM allows single dose)"
+  ],
+
+  "data_flow": {
+    "calculation": "User inputs test results → Calculate → adjust_pool() → detect_slam_context() → get_slam_guidance_structured() → chemistry calculations → GuidanceBuilder builds output → Scrollable results window → Save to history",
+    "dilution": "Open Dilution Calculator → Configure test kit (optional) → Select ratio → Recipe appears → Test diluted sample → Enter reading → Calculate actual FC → Auto-fills main chlorine field (if enabled)",
+    "state_transitions": "App loads config → detect_state_transition() compares previous vs current → Asks questions if suspicious → Updates config if user confirms"
+  },
+
+  "dependencies": {
+    "runtime": ["Python 3.7+", "tkinter"],
+    "config_files": [
+      "pool_config.txt",
+      "pool_history.txt",
+      "dilution_config.txt"
+    ]
+  },
+
+  "known_limitations": {
+    "_meta": "Each entry describes a limitation, why it exists, and whether it is a hardware constraint, a known bug, or deferred work. Remove entries promptly once resolved — a stale limitation is worse than no entry at all.",
+    "ph_accuracy": "pH readings flagged as inaccurate when FC > 10 ppm — chemical limitation, not an app bug.",
+    "dilution_assumes_distilled": "Dilution calculator assumes distilled water for dilution. No adjustment for tap water mineral content.",
+    "history_growth": "History file can grow large with no auto-pruning. Tracked under recommended_improvements.",
+    "cal_hypo_default": "Cal-Hypo calculations assume 65% concentration if not specified by user."
+  },
+
+  "recommended_improvements": {
+    "_meta": "Priority flows top to bottom — both across sections (immediate before structural before planned before suggested) and within each section (first entry is highest priority). 'immediate' = highest priority work for the next session. 'structural' = refactors that reduce future pain. 'planned' = committed features not yet started. 'suggested' = unvetted ideas not yet committed.",
+    "immediate": {},
+    "structural": {
+      "history_pruning": "Add auto-pruning to pool_history.txt to prevent unbounded growth."
+    },
+    "planned": {},
+    "suggested": {}
+  },
+
+  "recent_fixes": [
+    "Implemented centralized safety calculator (calculate_safe_doses) for acid, chlorine, soda ash, baking soda",
+    "Added intelligent dose splitting for large acid treatments based on pool volume",
+    "Fixed overnight test auto-reset logic with proper rules (SLAM mode off, algae present, clear water)"
+  ]
+}
