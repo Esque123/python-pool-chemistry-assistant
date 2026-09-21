@@ -4,7 +4,7 @@
   "project": {
     "_meta": "Core identity for this project - name, version (bump patch for fixes, minor for features, major for architecture changes, per ai_maintenance), and a one-line human-readable description. Architecture and feature detail live in core_features and known_limitations, not here.",
     "name": "Pool Chemistry Assistant",
-    "version": "1.2.1",
+    "version": "1.3.0",
     "description": "Desktop app that analyzes pool water chemistry test results and gives dosing/SLAM-recovery guidance, for a home pool owner managing their own pool.",
     "file_name": "context.json"
   },
@@ -85,7 +85,8 @@
     "post_slam_final_trigger": "Milky water + passed overnight test = post-SLAM final stage (focus on filtration)",
     "cya_dosing_timing": "CYA dosing: complete SLAM FIRST, THEN add CYA (adding mid-SLAM raises shock level)",
     "acid_dose_splitting": "Large acid doses: auto-split into multiple doses based on pool volume (1.5% threshold)",
-    "chlorine_dose_splitting": "Large chlorine raises: auto-split into multiple doses during maintenance (SLAM allows single dose)"
+    "chlorine_dose_splitting": "Large chlorine raises: auto-split into multiple doses during maintenance (SLAM allows single dose)",
+    "acid_chlorine_gas_risk": "HCl and chlorine products release toxic chlorine gas if combined -- when a report includes both an HCl dose and a chlorine-raise dose, adjust_pool() attaches a safety warning telling the user to dose them separately (pump running, different spots, 30-60 min apart). Never present combined/simultaneous HCl+chlorine dosing instructions."
   },
 
   "file_structure": {
@@ -153,10 +154,10 @@
   },
 
   "recent_fixes": [
+    "Added a chlorine-gas safety warning to adjust_pool() (pool_tool.py): when a report includes both an HCl dose (TA/pH lowering) and a chlorine-raise dose, it now attaches a warning to the HCl dose entry telling the user to add them separately -- pump running, different spots, wait 30-60 min between -- since combining HCl and chlorine products releases toxic chlorine gas. Prompted by Kevin dosing both in the same real session and asking for the app to surface this. New key_rules.acid_chlorine_gas_risk entry documents the invariant so future sessions don't reintroduce combined dosing instructions",
     "Fixed confusing TA/acid dosing output in the pH+TA-high combined report section (_calculate_ph_alkalinity_combined_actions and calculate_safe_doses in pool_tool.py): removed the redundant acid-dose-count warnings ('Large acid dose - split into 2 applications' etc.) that calculate_safe_doses appended on top of split_instructions -- the same split guidance was showing up twice, once inline with real dose amounts and again as a disconnected generic warning line further down the report, which is what prompted Kevin's confusion over a real report. Also changed the step label from '1. Add:' to '1. Add HCl:' so the chemical being dosed is named explicitly instead of implied",
     "Made the history save location visible in the UI: the History button now has a tooltip showing the configured history_path, the History window shows it as a prominent labeled line at the top instead of small gray footer text, and the 'no history file found' message now states the path it looked for instead of a bare not-found message. Prompted by Kevin not being able to find that morning's measurements -- turned out history_path in his pool_config.txt correctly points to his Windows Desktop (not the project folder), the app was working as configured, just not surfacing where. Also deleted the stale pool_history.txt sitting in the project root (40 entries, 2026-02-26 to 2026-03-11, predates this repo's git history entirely and was gitignored/never tracked -- confirmed dead leftover from an earlier implementation before history_path pointed to the Desktop)",
     "Cross-project context.json standardization pass: added project.file_name for self-identification (this doc's name/path varies per project). Also confirmed no PoolTool-specific action needed for the other backported template additions (potential_limitations, recommended_improvements.next_priority_order) since this project doesn't currently have unconfirmed risks or a priority order that isn't already immediate-then-structural-then-planned-then-suggested",
-    "Migrated context.json to match the current cross-project baseline template: nested project into a {name, version, description} object, converted key_rules from a plain array to the _meta+named-keys pattern used everywhere else, added missing _meta fields to calculation_constants/target_ranges/water_clarity/slam_lifecycle/key_classes/key_methods/data_flow/dependencies, added ai_python_whitespace/ai_model_recommendation/ai_model_recheck to ai_instructions, added dilution_config.txt to file_structure (it was missing despite being a real runtime file), and replaced the stale purpose text (said 'last 3 fixes' while ai_maintenance already said 5)",
-    "Code review cleanup: removed unreachable dead-code branches in detect_slam_context() (leftover milky/algae checks that could never fire, since those clarities always return earlier in the function); removed unused GuidanceBuilder.SECTION_TITLES dict (only its FOOTER entry was ever read, inlined as a literal); wired the previously-orphaned validate_inputs() into calculate() so unusual volume/HCl%/bleach%/cal-hypo%/pump-flow values now surface a warning dialog instead of being silently ignored. Verified detect_slam_context() unchanged across 31k input combinations before/after"
+    "Migrated context.json to match the current cross-project baseline template: nested project into a {name, version, description} object, converted key_rules from a plain array to the _meta+named-keys pattern used everywhere else, added missing _meta fields to calculation_constants/target_ranges/water_clarity/slam_lifecycle/key_classes/key_methods/data_flow/dependencies, added ai_python_whitespace/ai_model_recommendation/ai_model_recheck to ai_instructions, added dilution_config.txt to file_structure (it was missing despite being a real runtime file), and replaced the stale purpose text (said 'last 3 fixes' while ai_maintenance already said 5)"
   ]
 }

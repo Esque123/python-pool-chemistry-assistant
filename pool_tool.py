@@ -4060,6 +4060,21 @@ class PoolChemistryApp:
                             'warnings': []
                         })
             
+            # Safety note: HCl and chlorine products release chlorine gas if combined -
+            # flag it when a report is telling the user to dose both in the same session
+            has_acid_dose = any(d['type'] in ('combined', 'ph', 'ta') and 'HCl' in d['action'] for d in regular_doses)
+            has_chlorine_dose = any(d['type'] == 'chlorine' for d in regular_doses)
+            if has_acid_dose and has_chlorine_dose:
+                for dose in regular_doses:
+                    if dose['type'] in ('combined', 'ph', 'ta') and 'HCl' in dose['action']:
+                        dose['warnings'].append(
+                            "HCl and chlorine products react and release chlorine gas. Add them "
+                            "separately, with the pump running, in different spots. Wait between "
+                            "them for the first to circulate; a common guideline is at least 30 "
+                            "minutes to an hour."
+                        )
+                        break
+
             # Add regular doses if any
             if regular_doses:
                 builder.add_doseages(regular_doses)
