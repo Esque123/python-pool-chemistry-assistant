@@ -2346,8 +2346,7 @@ class PoolChemistryApp:
                         f"   • Add {first_dose:.0f} ml now\n"
                         f"   • Wait {wait_hours:.1f} hours, then add {second_dose:.0f} ml"
                     )
-                    result['warnings'].append("Large acid dose - split into 2 applications")
-                    
+
                 elif safe_dose_count == 3:
                     # 3 doses: 50% now, 25% later, 25% final
                     first_dose = amount_needed * 0.5
@@ -2363,8 +2362,7 @@ class PoolChemistryApp:
                         f"   • Wait another {wait_hours:.1f} hours\n"
                         f"   • Add final {third_dose:.0f} ml if still needed"
                     )
-                    result['warnings'].append("Large acid dose - progressive 3-dose schedule")
-                    
+
                 elif safe_dose_count == 4:
                     # 4 doses: 40% now, 20% x 3 later
                     first_dose = amount_needed * 0.4
@@ -2382,8 +2380,7 @@ class PoolChemistryApp:
                         f"   • Wait {wait_hours:.1f} hours\n"
                         f"   • Add final {subsequent:.0f} ml if needed"
                     )
-                    result['warnings'].append("Very large acid dose - 4-dose progressive schedule")
-                    
+
                 else:  # 5+ doses - use equal splitting with progressive principle
                     # For 5+, use 80% of safe limit as base dose
                     base_dose = max_safe_acid * 0.8
@@ -2406,8 +2403,7 @@ class PoolChemistryApp:
                     
                     result['safe_amount'] = first_dose
                     result['split_instructions'] = "\n".join(instruction_lines)
-                    result['warnings'].append(f"Extremely large acid dose - {num_doses} doses recommended")
-                
+
                 # Context-specific warnings
                 if is_slam:
                     result['warnings'].append("During SLAM, you can add doses more frequently (every 2 hours) to maintain shock level")
@@ -3126,7 +3122,7 @@ class PoolChemistryApp:
             action_lines = [
                 f"{context_prefix}pH{'normal' if ph_state == 'normal' else 'high'} ({pH:.2f}), TA high ({alkalinity} ppm):",
                 "   Use stepwise acid/aeration to safely lower TA:",
-                "   1. Add:"
+                "   1. Add HCl:"
             ]
             
             if acid_safety['split_instructions']:
