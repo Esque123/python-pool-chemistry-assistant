@@ -3699,12 +3699,12 @@ class PoolChemistryApp:
         # Liquid bleach calculation
         ml_per_ppm_bleach = 80.0 * (12.5 / bleach_percent)
         ml_bleach = delta * scale * ml_per_ppm_bleach
-        ml_bleach = round(ml_bleach / 10) * 10
+        ml_bleach = round(ml_bleach)
 
         # Cal-Hypo calculation
         g_per_ppm_calhypo = 15.38 * (65.0 / cal_hypo_percent)
         g_calhypo = delta * scale * g_per_ppm_calhypo
-        g_calhypo = round(g_calhypo / 10) * 10
+        g_calhypo = round(g_calhypo)
 
         result = {
             'target_fc': target_fc,
@@ -3729,8 +3729,8 @@ class PoolChemistryApp:
         if delta > split_threshold_ppm:
             doses = max(2, int(delta / split_threshold_ppm) + 1)
             per_dose_delta = delta / doses
-            per_dose_ml = round(per_dose_delta * scale * ml_per_ppm_bleach / 10) * 10
-            per_dose_g = round(per_dose_delta * scale * g_per_ppm_calhypo / 10) * 10
+            per_dose_ml = round(per_dose_delta * scale * ml_per_ppm_bleach)
+            per_dose_g = round(per_dose_delta * scale * g_per_ppm_calhypo)
             
             result['split_info'] = {
                 'needed': True,
