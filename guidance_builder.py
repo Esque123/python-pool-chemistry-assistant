@@ -16,10 +16,10 @@ class OutputSection(Enum):
     PARAMETERS = "parameters"
     MODE = "mode"
     CHEMISTRY_ANALYSIS = "chemistry_analysis"
-    SLAM_DOSES = "slam_doses"
     SLAM_MAINTENANCE = "slam_maintenance"
     KEY_MILESTONE = "key_milestone"
     DOSEAGES = "doseages"
+    SLAM_DOSES = "slam_doses"
     PUMP_GUIDANCE = "pump_guidance"
     WATER_CLARITY = "water_clarity"
     MAINTENANCE_TIPS = "maintenance_tips"
@@ -36,10 +36,10 @@ class GuidanceBuilder:
         OutputSection.PARAMETERS,
         OutputSection.MODE,
         OutputSection.CHEMISTRY_ANALYSIS,
-        OutputSection.SLAM_DOSES,
         OutputSection.SLAM_MAINTENANCE,
         OutputSection.KEY_MILESTONE,
         OutputSection.DOSEAGES,
+        OutputSection.SLAM_DOSES,
         OutputSection.PUMP_GUIDANCE,
         OutputSection.WATER_CLARITY,
         OutputSection.MAINTENANCE_TIPS,

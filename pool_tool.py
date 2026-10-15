@@ -3944,12 +3944,16 @@ class PoolChemistryApp:
             builder.add_chemistry_analysis(chem_readings, chem_statuses)
             
             # ===== SLAM CONTENT COLLECTION =====
+            # Pre-/during-SLAM chlorine doses live in the SLAM_DOSES block, not in
+            # regular_doses, so track them here for the chlorine-gas safety check below.
+            has_slam_chlorine_dose = False
             if slam_context in ['pre_slam', 'during_slam', 'post_slam', 'post_slam_final']:
                 slam_data = self.get_slam_guidance_structured(Cl, CYA, pH, water_clarity, local_config, slam_context=slam_context)
-                
+
                 # SLAM DOSES - now passing raw data dict
                 if slam_data['sections']['doses'] and not slam_data['sections']['doses'].get('skip'):
                     builder.add_slam_doses(slam_data['sections']['doses'])
+                    has_slam_chlorine_dose = True
                 
                 # SLAM MAINTENANCE - raw strings without bullets
                 if slam_data['sections']['maintenance']:
@@ -4061,15 +4065,24 @@ class PoolChemistryApp:
                         })
             
             # Safety note: HCl and chlorine products release chlorine gas if combined -
-            # flag it when a report is telling the user to dose both in the same session
-            has_acid_dose = any(d['type'] in ('combined', 'ph', 'ta') and 'HCl' in d['action'] for d in regular_doses)
-            has_chlorine_dose = any(d['type'] == 'chlorine' for d in regular_doses)
+            # flag it when a report is telling the user to dose both in the same session.
+            # An acid (HCl) dose is any pH/TA entry that LOWERS pH or TA: pH-reduction
+            # text reads "pH high ..." (and names no chemical), TA-reduction text names
+            # "acid"/"HCl" - so match on any of those rather than the bare "HCl" token,
+            # which only appears in TA-reduction strings.
+            def _is_acid_dose(dose):
+                if dose['type'] not in ('combined', 'ph', 'ta'):
+                    return False
+                text = dose['action'].lower()
+                return 'hcl' in text or 'acid' in text or 'ph high' in text
+            has_acid_dose = any(_is_acid_dose(d) for d in regular_doses)
+            has_chlorine_dose = any(d['type'] == 'chlorine' for d in regular_doses) or has_slam_chlorine_dose
             if has_acid_dose and has_chlorine_dose:
                 gas_wait = self.get_waiting_time(
                     local_config['pool_volume_liters'], local_config.get('pump_flow_rate'), 'acid'
                 )
                 for dose in regular_doses:
-                    if dose['type'] in ('combined', 'ph', 'ta') and 'HCl' in dose['action']:
+                    if _is_acid_dose(dose):
                         dose['warnings'].append(
                             "HCl and chlorine products react and release chlorine gas. Add them "
                             "separately, with the pump running, in different spots. Wait for the "
