@@ -17,13 +17,14 @@ import sys
 import traceback
 import tkinter as tk
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from tkinter import ttk, messagebox
 from tkinter.scrolledtext import ScrolledText
 from typing import Optional, Dict, Any
 
 # Simple direct import - both files are in the same directory
 from guidance_builder import GuidanceBuilder
+from sun_times import local_sunset
 
 # ==============================
 # CALCULATION CONSTANTS (stay at module level - they're truly global constants)
@@ -47,13 +48,16 @@ STALE_STATE_DAYS_THRESHOLD = 14  # Gap since last_seen_date that triggers a "sti
 # ==============================
 # SLAM TIMING
 # ==============================
-# Hour of day (24h, local time) before which it's too early to START the SLAM
-# chlorine shock. Chlorine added in the morning/midday is burned off by daytime
-# UV before it kills much algae -- worst at low/unknown CYA -- so the big initial
-# push is best held until late afternoon, within a couple of hours of sunset, so
-# it works through the night. This only gates the initial pre-SLAM push; top-ups
-# during an active SLAM are maintained around the clock and are fine any time.
+# Chlorine added in the morning/midday is burned off by daytime UV before it
+# kills much algae -- worst at low/unknown CYA -- so the initial SLAM shock is
+# best held until ~2 hours before sunset so it works through the night. When the
+# machine's location can be determined (sun_times, from the Windows time zone),
+# the cutoff tracks today's real sunset; SLAM_SHOCK_EARLIEST_HOUR is the fixed
+# fallback hour used only when sunset can't be computed (off Windows, unknown
+# zone, or polar day/night). Either way this gates only the initial pre-SLAM
+# push; top-ups during an active SLAM are maintained around the clock.
 SLAM_SHOCK_EARLIEST_HOUR = 16
+SLAM_SHOCK_SUNSET_LEAD_HOURS = 2  # start the shock this many hours before sunset
 
 # ==============================
 # UNKNOWN CYA CONSTANTS
@@ -2547,15 +2551,34 @@ class PoolChemistryApp:
     # SLAM LIFE CYCLE DETECTION
     # ==============================
     
-    def _is_too_early_for_shock(self, now=None):
-        """True if it's too early in the day to start the SLAM chlorine shock.
+    def _shock_timing(self, now=None):
+        """Work out whether it's too early to start the SLAM chlorine shock.
 
-        Before SLAM_SHOCK_EARLIEST_HOUR the initial push should be held until
-        late afternoon so it isn't burned off by daytime UV. `now` is injectable
-        for testing; defaults to the current local time.
+        Prefers today's real sunset (from the machine's location) and sets the
+        cutoff SLAM_SHOCK_SUNSET_LEAD_HOURS before it; falls back to the fixed
+        SLAM_SHOCK_EARLIEST_HOUR when sunset can't be determined. `now` is
+        injectable for testing and defaults to the current local time.
+
+        Returns a dict: {'now', 'sunset' (datetime or None), 'cutoff', 'too_early'}.
         """
         now = now or datetime.now()
-        return now.hour < SLAM_SHOCK_EARLIEST_HOUR
+        sunset = local_sunset(now)
+        if sunset is not None:
+            cutoff = sunset - timedelta(hours=SLAM_SHOCK_SUNSET_LEAD_HOURS)
+        else:
+            cutoff = now.replace(
+                hour=SLAM_SHOCK_EARLIEST_HOUR, minute=0, second=0, microsecond=0
+            )
+        return {
+            'now': now,
+            'sunset': sunset,
+            'cutoff': cutoff,
+            'too_early': now < cutoff,
+        }
+
+    def _is_too_early_for_shock(self, now=None):
+        """True if it's too early in the day to start the SLAM chlorine shock."""
+        return self._shock_timing(now)['too_early']
 
     def detect_slam_context(self, pH, chlorine, cya, water_clarity="crystal_clear", overnight_test="not_tested", is_slam_mode=False):
         """
@@ -2725,11 +2748,13 @@ class PoolChemistryApp:
         if slam_context == 'pre_slam':
             result['sections']['assessment'].append("🔍 PRE-SLAM ASSESSMENT")
 
-            # Timing gate for the initial shock: before mid-afternoon the dose just
-            # feeds UV loss, so we hold it rather than starting now. Only gates the
-            # pre-SLAM push; active-SLAM top-ups take the 'during_slam' path.
-            now_dt = now or datetime.now()
-            too_early = self._is_too_early_for_shock(now_dt)
+            # Timing gate for the initial shock: before ~2 hrs to sunset the dose
+            # just feeds UV loss, so we hold it rather than starting now. Only
+            # gates the pre-SLAM push; active-SLAM top-ups take the 'during_slam'
+            # path. Cutoff tracks real sunset when location is known, else a fixed
+            # fallback hour.
+            timing = self._shock_timing(now)
+            too_early = timing['too_early']
             
             # CYA unknown warnings
             if is_cya_unknown:
@@ -2799,22 +2824,33 @@ class PoolChemistryApp:
                     # Store the COMPLEX dict in sections['doses']
                     result['sections']['doses'] = dose_data
 
-                    # Attach a "hold until late afternoon" banner to the dose block
-                    # when it's too early to start the shock.
+                    # Attach a "hold until ~2 hrs before sunset" banner to the
+                    # dose block when it's too early to start the shock.
                     if too_early:
-                        dose_data['timing_banner'] = [
-                            f"⏰ TIMING: it's {now_dt:%H:%M} — early to start the shock.",
-                            "Hold this dose until late afternoon (within ~2 hrs of sunset) so it",
-                            "works overnight instead of burning off in UV — worst at low/unknown CYA.",
-                            "Any pH/TA correction above can be done now.",
-                        ]
+                        if timing['sunset'] is not None:
+                            dose_data['timing_banner'] = [
+                                f"⏰ TIMING: it's {timing['now']:%H:%M} and today's sunset is ~{timing['sunset']:%H:%M}.",
+                                f"Hold this dose until ~{timing['cutoff']:%H:%M} (≈2 hrs before sunset) so it works",
+                                "overnight instead of burning off in UV — worst at low/unknown CYA.",
+                                "Any pH/TA correction above can be done now.",
+                            ]
+                        else:
+                            dose_data['timing_banner'] = [
+                                f"⏰ TIMING: it's {timing['now']:%H:%M} — early to start the shock.",
+                                "Hold this dose until late afternoon (within ~2 hrs of sunset) so it",
+                                "works overnight instead of burning off in UV — worst at low/unknown CYA.",
+                                "Any pH/TA correction above can be done now.",
+                            ]
 
                 # SLAM process steps
                 result['sections']['protocol'].append("📋 SLAM PROCESS:")
                 result['sections']['protocol'].append("   1. Test and adjust pH to 7.2-7.8 FIRST (7.2 is ideal for SLAM effectiveness)")
                 step2 = f"   2. Add chlorine to reach {shock_level:.1f} ppm"
                 if too_early:
-                    step2 += " (ideally late afternoon — see timing note)"
+                    if timing['sunset'] is not None:
+                        step2 += f" (ideally ~{timing['cutoff']:%H:%M}, ≈2 hrs before sunset — see timing note)"
+                    else:
+                        step2 += " (ideally late afternoon — see timing note)"
                 result['sections']['protocol'].append(step2)
                 result['sections']['protocol'].append("   3. Test FC every 2-4 hours, maintain shock level:")
                 result['sections']['protocol'].append("      • Expect 2-4 ppm FC drop per 2-4 hour test initially")
