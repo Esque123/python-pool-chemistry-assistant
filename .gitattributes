@@ -1,0 +1,16 @@
+# This repo's source is CRLF by convention (*.py, *.spec, *.ini) and is
+# deliberately LEFT UNLISTED here, so git keeps that convention and we avoid a
+# churny one-time renormalization of the source files. Do NOT add a blanket
+# "* text=auto" rule -- it would try to normalize those files to LF.
+#
+# Only the LF-native files are protected from the Windows mount's silent CRLF
+# drift (zero churn: they are already LF in the index, so declaring eol=lf just
+# makes git compare normalized content and stops phantom "modified" diffs).
+.gitignore  text eol=lf
+*.json      text eol=lf
+
+# Binary assets (future-proofing)
+*.png binary
+*.ico binary
+*.pdf binary
+*.zip binary
