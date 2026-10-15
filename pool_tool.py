@@ -45,6 +45,17 @@ CALCULATION_CONSTANTS = {
 STALE_STATE_DAYS_THRESHOLD = 14  # Gap since last_seen_date that triggers a "still accurate?" prompt
 
 # ==============================
+# SLAM TIMING
+# ==============================
+# Hour of day (24h, local time) before which it's too early to START the SLAM
+# chlorine shock. Chlorine added in the morning/midday is burned off by daytime
+# UV before it kills much algae -- worst at low/unknown CYA -- so the big initial
+# push is best held until late afternoon, within a couple of hours of sunset, so
+# it works through the night. This only gates the initial pre-SLAM push; top-ups
+# during an active SLAM are maintained around the clock and are fine any time.
+SLAM_SHOCK_EARLIEST_HOUR = 16
+
+# ==============================
 # UNKNOWN CYA CONSTANTS
 # ==============================
 UNKNOWN_CYA = {
@@ -2536,6 +2547,16 @@ class PoolChemistryApp:
     # SLAM LIFE CYCLE DETECTION
     # ==============================
     
+    def _is_too_early_for_shock(self, now=None):
+        """True if it's too early in the day to start the SLAM chlorine shock.
+
+        Before SLAM_SHOCK_EARLIEST_HOUR the initial push should be held until
+        late afternoon so it isn't burned off by daytime UV. `now` is injectable
+        for testing; defaults to the current local time.
+        """
+        now = now or datetime.now()
+        return now.hour < SLAM_SHOCK_EARLIEST_HOUR
+
     def detect_slam_context(self, pH, chlorine, cya, water_clarity="crystal_clear", overnight_test="not_tested", is_slam_mode=False):
         """
         Intelligently detect where we are in the SLAM lifecycle.
@@ -2623,7 +2644,7 @@ class PoolChemistryApp:
     # COMPREHENSIVE SLAM GUIDANCE
     # ==============================
     
-    def get_slam_guidance_structured(self, chlorine, cya, pH, water_clarity="crystal_clear", config=None, slam_context=None):
+    def get_slam_guidance_structured(self, chlorine, cya, pH, water_clarity="crystal_clear", config=None, slam_context=None, now=None):
         """
         Returns structured SLAM guidance with raw data for the builder to format.
         
@@ -2703,6 +2724,12 @@ class PoolChemistryApp:
         # ===== PRE-SLAM SECTION =====
         if slam_context == 'pre_slam':
             result['sections']['assessment'].append("🔍 PRE-SLAM ASSESSMENT")
+
+            # Timing gate for the initial shock: before mid-afternoon the dose just
+            # feeds UV loss, so we hold it rather than starting now. Only gates the
+            # pre-SLAM push; active-SLAM top-ups take the 'during_slam' path.
+            now_dt = now or datetime.now()
+            too_early = self._is_too_early_for_shock(now_dt)
             
             # CYA unknown warnings
             if is_cya_unknown:
@@ -2771,11 +2798,24 @@ class PoolChemistryApp:
                     
                     # Store the COMPLEX dict in sections['doses']
                     result['sections']['doses'] = dose_data
-                
+
+                    # Attach a "hold until late afternoon" banner to the dose block
+                    # when it's too early to start the shock.
+                    if too_early:
+                        dose_data['timing_banner'] = [
+                            f"⏰ TIMING: it's {now_dt:%H:%M} — early to start the shock.",
+                            "Hold this dose until late afternoon (within ~2 hrs of sunset) so it",
+                            "works overnight instead of burning off in UV — worst at low/unknown CYA.",
+                            "Any pH/TA correction above can be done now.",
+                        ]
+
                 # SLAM process steps
                 result['sections']['protocol'].append("📋 SLAM PROCESS:")
                 result['sections']['protocol'].append("   1. Test and adjust pH to 7.2-7.8 FIRST (7.2 is ideal for SLAM effectiveness)")
-                result['sections']['protocol'].append(f"   2. Add chlorine to reach {shock_level:.1f} ppm")
+                step2 = f"   2. Add chlorine to reach {shock_level:.1f} ppm"
+                if too_early:
+                    step2 += " (ideally late afternoon — see timing note)"
+                result['sections']['protocol'].append(step2)
                 result['sections']['protocol'].append("   3. Test FC every 2-4 hours, maintain shock level:")
                 result['sections']['protocol'].append("      • Expect 2-4 ppm FC drop per 2-4 hour test initially")
                 result['sections']['protocol'].append("      • Drops will decrease as algae dies (good sign!)")
@@ -3865,8 +3905,8 @@ class PoolChemistryApp:
     # Main Adjust Function
     # ==============================
     
-    def adjust_pool(self, readings, config, water_clarity="crystal_clear", 
-                is_slam_mode=False, overnight_test="not_tested"):
+    def adjust_pool(self, readings, config, water_clarity="crystal_clear",
+                is_slam_mode=False, overnight_test="not_tested", now=None):
         """
         Main function to analyze pool chemistry and generate recommendations.
         Uses GuidanceBuilder for structured output.
@@ -3948,7 +3988,7 @@ class PoolChemistryApp:
             # regular_doses, so track them here for the chlorine-gas safety check below.
             has_slam_chlorine_dose = False
             if slam_context in ['pre_slam', 'during_slam', 'post_slam', 'post_slam_final']:
-                slam_data = self.get_slam_guidance_structured(Cl, CYA, pH, water_clarity, local_config, slam_context=slam_context)
+                slam_data = self.get_slam_guidance_structured(Cl, CYA, pH, water_clarity, local_config, slam_context=slam_context, now=now)
 
                 # SLAM DOSES - now passing raw data dict
                 if slam_data['sections']['doses'] and not slam_data['sections']['doses'].get('skip'):

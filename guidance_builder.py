@@ -209,6 +209,16 @@ class GuidanceBuilder:
             lines = [
                 f"[SLAM DOSES] {self.SECTION_EMOJIS[OutputSection.SLAM_DOSES]}",
                 f"{'─'*47}",
+            ]
+
+            # Optional timing banner (e.g. "hold this dose until late afternoon")
+            # rendered above the dose amounts so the "when" is seen first.
+            if dose_data.get('timing_banner'):
+                for banner_line in dose_data['timing_banner']:
+                    lines.append(f"   {banner_line}")
+                lines.append("")
+
+            lines += [
                 f"   Raise FC to {dose_data['target_fc']:.1f} ppm:",
                 f"     • Add ≈ {dose_data['liquid']['amount']:.0f} {dose_data['liquid']['unit']} of {dose_data['liquid']['percentage']}% liquid chlorine",
                 f"     • OR add ≈ {dose_data['cal_hypo']['amount']:.0f} {dose_data['cal_hypo']['unit']} of {dose_data['cal_hypo']['percentage']}% calcium hypochlorite"
