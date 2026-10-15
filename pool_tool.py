@@ -2580,6 +2580,20 @@ class PoolChemistryApp:
         """True if it's too early in the day to start the SLAM chlorine shock."""
         return self._shock_timing(now)['too_early']
 
+    def _slam_pump_guidance(self, V, pump):
+        """Pump guidance for an active SLAM: run continuously for max circulation
+        (keeps chlorine mixed and filters dead algae), rather than the
+        energy-saving maintenance runtime. Shared by the pre-SLAM and
+        during-SLAM paths so they can't drift."""
+        lines = [
+            "Run the pump continuously (24/7) for the whole SLAM",
+            "Continuous flow keeps chlorine mixed and filters out dead algae",
+        ]
+        if pump and pump > 0:
+            lines.append(f"(one full turnover of your {V:.0f}L pool takes {V / pump:.1f} h)")
+        lines.append("If you must pause it, brush around the restart to resuspend debris")
+        return lines
+
     def detect_slam_context(self, pH, chlorine, cya, water_clarity="crystal_clear", overnight_test="not_tested", is_slam_mode=False):
         """
         Intelligently detect where we are in the SLAM lifecycle.
@@ -2925,39 +2939,9 @@ class PoolChemistryApp:
             V = config.get('pool_volume_liters', 7250) if config else 7250
             pump = config.get('pump_flow_rate') if config else None
             
-            if pump and pump > 0:
-                turnover_hours = V / pump
-                result['sections']['pump_guidance'].append("⚡ CUSTOMIZED PUMP GUIDANCE (based on YOUR pump):")
-                
-                if turnover_hours <= 1:
-                    min_runtime = turnover_hours * 2
-                    rec_runtime = turnover_hours * 4
-                    result['sections']['pump_guidance'].append(f"Your pump turns over your {V}L pool in just {turnover_hours:.1f} hours!")
-                    result['sections']['pump_guidance'].append(f"Run pump for ONLY {min_runtime:.1f}-{rec_runtime:.1f} hours TOTAL per day")
-                    result['sections']['pump_guidance'].append(f"Recommended: 2 cycles of {rec_runtime/2:.1f} hours each")
-                    result['sections']['pump_guidance'].append("BRUSH before each restart to suspend debris")
-                elif turnover_hours <= 3:
-                    min_runtime = turnover_hours * 2
-                    rec_runtime = turnover_hours * 4
-                    result['sections']['pump_guidance'].append(f"Your pump turns over your {V}L pool in {turnover_hours:.1f} hours")
-                    result['sections']['pump_guidance'].append(f"Run pump for {min_runtime:.1f}-{rec_runtime:.1f} hours TOTAL per day")
-                    result['sections']['pump_guidance'].append("Run during and 1-2 hours after chlorine additions")
-                    result['sections']['pump_guidance'].append("BRUSH before each restart")
-                else:
-                    min_runtime = turnover_hours * 2
-                    rec_runtime = turnover_hours * 4
-                    result['sections']['pump_guidance'].append(f"Your pump turns over your {V}L pool in {turnover_hours:.1f} hours")
-                    result['sections']['pump_guidance'].append(f"For best results, aim for {rec_runtime:.0f} hours of runtime")
-                    result['sections']['pump_guidance'].append(f"Consider running {rec_runtime/2:.0f} hours morning and evening")
-                    result['sections']['pump_guidance'].append("BRUSHING is extra important with slower pumps")
-            else:
-                result['sections']['pump_guidance'].append("⚡ PUMP GUIDANCE (flow rate not provided):")
-                result['sections']['pump_guidance'].append("Run pump for 3-4 cycles of 2-4 hours each day")
-                result['sections']['pump_guidance'].append("Example: 2hr morning, 2hr afternoon, 2hr evening")
-                result['sections']['pump_guidance'].append("BRUSH before each restart to suspend debris")
-                result['sections']['pump_guidance'].append("")
-                result['sections']['pump_guidance'].append("💡 For MORE ACCURATE guidance:")
-                result['sections']['pump_guidance'].append("Enter your pump flow rate in 'Pool Setup' above")
+            # During a SLAM you want maximum circulation, not the energy-saving
+            # maintenance runtime.
+            result['sections']['pump_guidance'].extend(self._slam_pump_guidance(V, pump))
             
             # Milestone
             result['sections']['milestone'].append("🎯 **KEY MILESTONE - Overnight FC Loss Test:**")
@@ -4176,7 +4160,13 @@ class PoolChemistryApp:
             turnover_hours = None
             
             if not pump_guidance:  # If we didn't get any from SLAM guidance
-                if pump and pump > 0:
+                if slam_context == 'pre_slam':
+                    # Once the shock starts you want maximum circulation, so give
+                    # the same continuous-run guidance as during-SLAM.
+                    if pump and pump > 0:
+                        turnover_hours = V / pump
+                    pump_guidance = self._slam_pump_guidance(V, pump)
+                elif pump and pump > 0:
                     turnover_hours = V / pump
                     pump_guidance = [
                         f"Your pump turns over your {V:.0f}L pool in {turnover_hours:.1f} hours",
