@@ -3822,7 +3822,6 @@ class PoolChemistryApp:
 
         if is_slam:
             result['notes'].append("Maintain pH 7.2–7.5 while FC > 10 ppm (test often)")
-            result['notes'].append("Brush walls/floor daily + run pump/filter 24/7")
 
         if cya is None or cya < 20:
             result['warnings'].append("CYA is low or unknown — re-test CYA soon for accurate SLAM/maintenance targets")
@@ -4199,7 +4198,12 @@ class PoolChemistryApp:
             })
             
             # ===== WATER CLARITY GUIDANCE =====
-            if water_clarity != "crystal_clear":
+            # Skip for algae during a SLAM: the guidance duplicates the SLAM
+            # protocol above and the status just repeats the Parameters line.
+            show_clarity = water_clarity != "crystal_clear"
+            if water_clarity in ["green_algae", "black_algae"] and slam_context in ("pre_slam", "during_slam"):
+                show_clarity = False
+            if show_clarity:
                 clarity_guidance = []
                 
                 if water_clarity in ["slightly_cloudy", "cloudy"]:
@@ -4276,12 +4280,11 @@ class PoolChemistryApp:
                 ]
             
             else:  # Pre-SLAM or During SLAM
-                maintenance_tips = [
-                    "Test chlorine every 2-4 hours",
-                    "Brush pool daily",
-                    "Run pump 24/7",
-                    "Clean filter when pressure rises 25%"
-                ]
+                # No MAINTENANCE TIPS block here: the SLAM PROCESS checklist
+                # (pre-SLAM) and the SLAM MAINTENANCE section (during-SLAM)
+                # already cover test/brush/pump/filter, so repeating them as a
+                # second list just adds noise and invites confusion.
+                maintenance_tips = []
             
             if maintenance_tips:
                 builder.add_maintenance_tips(maintenance_tips)
