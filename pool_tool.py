@@ -40,6 +40,18 @@ CALCULATION_CONSTANTS = {
     'CALCIUM_DOSE': 11,            # g CaCl2 (100%) to raise CH by 1 ppm in 10,000L
 }
 
+
+def hcl_density(pct):
+    """Approximate density (kg/L ≈ g/ml) of aqueous HCl at a given w/w %.
+
+    Linear fit rho ≈ 1.0 + 0.005·pct, accurate to ~1% across the 0–35% range
+    sold for pools (≈1.157 at 31.45%). Used by weight-mode dosing to convert a
+    volumetric acid dose (ml) into the mass (g) a water-calibrated kitchen scale
+    must read -- such a scale assumes 1 ml = 1 g, so weighing the raw ml figure
+    of a denser-than-water acid under-doses by this factor.
+    """
+    return 1.0 + 0.005 * pct
+
 # ==============================
 # STALE STATE DETECTION
 # ==============================
@@ -1275,7 +1287,20 @@ class PoolChemistryApp:
         self.entry_hcl.insert(0, f"{self.app_state.config['hcl_percent']:g}")
         self.entry_hcl.pack(fill="x")
         ToolTip(self.entry_hcl, "Typical: 10–35%")
-        
+
+        # Acid measurement mode: show acid doses as scale weight (g) instead of volume (ml)
+        self.acid_weight_mode_var = tk.BooleanVar(value=self.app_state.config.get('acid_weight_mode', False))
+        acid_weight_checkbox = tk.Checkbutton(
+            cf,
+            text="⚖️ Measure acid by weight (kitchen scale)",
+            variable=self.acid_weight_mode_var,
+            command=self.on_acid_weight_mode_toggle,
+        )
+        acid_weight_checkbox.pack(anchor="w")
+        ToolTip(acid_weight_checkbox, "Show HCl doses in grams instead of ml. A kitchen scale in 'ml' mode "
+                                      "assumes 1 ml = 1 g (water); acid is denser, so weighing the ml figure "
+                                      "under-doses. This converts ml → g using the acid's density.")
+
         # Bleach %
         tk.Label(cf, text="Bleach (%):").pack(anchor="w")
         self.entry_bleach = tk.Entry(cf)
@@ -2174,13 +2199,34 @@ class PoolChemistryApp:
         """Calculate TA increase from soda ash."""
         return (grams / 100) * 14 * (10000 / pool_volume_liters)
     
+    def on_acid_weight_mode_toggle(self):
+        """Persist the acid measurement-unit preference immediately when toggled,
+        so it survives even if the user closes the app without running an analysis."""
+        self.app_state.config['acid_weight_mode'] = self.acid_weight_mode_var.get()
+        save_config(self.app_state.config, self.app_state.config_file, self)
+
+    def fmt_acid(self, ml):
+        """Render an acid dose in the user's chosen measurement unit.
+
+        Volume mode -> '120 ml'. Weight mode -> '139 g', the mass a water-calibrated
+        kitchen scale must read to deliver that volume of HCl (see hcl_density).
+        All internal dose math stays in ml; this only changes how acid is displayed.
+        """
+        if self.app_state.config.get('acid_weight_mode'):
+            try:
+                pct = float(self.app_state.config.get('hcl_percent', 31.45))
+            except (TypeError, ValueError):
+                pct = 31.45
+            return f"{ml * hcl_density(pct):.0f} g"
+        return f"{ml:.0f} ml"
+
     def get_high_dose_note(self, acid_ml, V, pump):
         """Check for high dose and provide split instructions."""
         if acid_ml > V * 0.015:
             turnover = V / pump if pump else None
             split_hours = max(2, turnover * 1.5) if turnover else 6
             half_ml = acid_ml / 2
-            return f"\n   HIGH DOSE: Add {half_ml:.0f} ml now, {half_ml:.0f} ml after {split_hours:.1f} hrs"
+            return f"\n   HIGH DOSE: Add {self.fmt_acid(half_ml)} now, {self.fmt_acid(half_ml)} after {split_hours:.1f} hrs"
         return ""
     
     # ==============================
@@ -2358,8 +2404,8 @@ class PoolChemistryApp:
                     result['safe_amount'] = first_dose
                     result['split_instructions'] = (
                         f"⚠️ Split into 2 doses:\n"
-                        f"   • Add {first_dose:.0f} ml now\n"
-                        f"   • Wait {wait_hours:.1f} hours, then add {second_dose:.0f} ml"
+                        f"   • Add {self.fmt_acid(first_dose)} now\n"
+                        f"   • Wait {wait_hours:.1f} hours, then add {self.fmt_acid(second_dose)}"
                     )
 
                 elif safe_dose_count == 3:
@@ -2371,11 +2417,11 @@ class PoolChemistryApp:
                     result['safe_amount'] = first_dose
                     result['split_instructions'] = (
                         f"⚠️ Progressive dosing (3 doses):\n"
-                        f"   • Add {first_dose:.0f} ml now\n"
+                        f"   • Add {self.fmt_acid(first_dose)} now\n"
                         f"   • Wait {wait_hours:.1f} hours, retest pH\n"
-                        f"   • Add {second_dose:.0f} ml\n"
+                        f"   • Add {self.fmt_acid(second_dose)}\n"
                         f"   • Wait another {wait_hours:.1f} hours\n"
-                        f"   • Add final {third_dose:.0f} ml if still needed"
+                        f"   • Add final {self.fmt_acid(third_dose)} if still needed"
                     )
 
                 elif safe_dose_count == 4:
@@ -2387,13 +2433,13 @@ class PoolChemistryApp:
                     result['safe_amount'] = first_dose
                     result['split_instructions'] = (
                         f"⚠️ Progressive dosing (4 doses):\n"
-                        f"   • Add {first_dose:.0f} ml now\n"
+                        f"   • Add {self.fmt_acid(first_dose)} now\n"
                         f"   • Wait {wait_hours:.1f} hours, retest pH\n"
-                        f"   • Add {subsequent:.0f} ml\n"
+                        f"   • Add {self.fmt_acid(subsequent)}\n"
                         f"   • Wait {wait_hours:.1f} hours, retest\n"
-                        f"   • Add {subsequent:.0f} ml\n"
+                        f"   • Add {self.fmt_acid(subsequent)}\n"
                         f"   • Wait {wait_hours:.1f} hours\n"
-                        f"   • Add final {subsequent:.0f} ml if needed"
+                        f"   • Add final {self.fmt_acid(subsequent)} if needed"
                     )
 
                 else:  # 5+ doses - use equal splitting with progressive principle
@@ -2406,15 +2452,15 @@ class PoolChemistryApp:
                     
                     instruction_lines = [
                         f"⚠️ EXTREME DOSE - {num_doses}-dose progressive schedule:",
-                        f"   • Add {first_dose:.0f} ml now"
+                        f"   • Add {self.fmt_acid(first_dose)} now"
                     ]
                     
                     for i in range(1, num_doses):
                         instruction_lines.append(f"   • Wait {wait_hours:.1f} hours, retest pH")
                         if i == num_doses - 1:
-                            instruction_lines.append(f"   • Add final {subsequent:.0f} ml if needed")
+                            instruction_lines.append(f"   • Add final {self.fmt_acid(subsequent)} if needed")
                         else:
-                            instruction_lines.append(f"   • Add {subsequent:.0f} ml")
+                            instruction_lines.append(f"   • Add {self.fmt_acid(subsequent)}")
                     
                     result['safe_amount'] = first_dose
                     result['split_instructions'] = "\n".join(instruction_lines)
@@ -3113,7 +3159,7 @@ class PoolChemistryApp:
                     if acid_safety['split_instructions']:
                         action_lines.append(f"   • {acid_safety['split_instructions']}")
                     else:
-                        action_lines.append(f"   • Add {safe_acid_ml:.0f} ml {hcl}% HCl")
+                        action_lines.append(f"   • Add {self.fmt_acid(safe_acid_ml)} {hcl}% HCl")
                     
                     action_lines.append("   • Wait 30 minutes, then retest pH")
                     
@@ -3188,7 +3234,7 @@ class PoolChemistryApp:
             if acid_safety['split_instructions']:
                 action_lines.append(f"      {acid_safety['split_instructions']}")
             else:
-                action_lines.append(f"      {acid_ml:.0f}ml {hcl}% HCl")
+                action_lines.append(f"      {self.fmt_acid(acid_ml)} {hcl}% HCl")
             
             action_lines.append(f"      → Wait {wait_acid}")
             action_lines.append(f"   2. Aerate {wait_aer} to raise pH back to ~7.6")
@@ -3296,7 +3342,7 @@ class PoolChemistryApp:
             if acid_safety['split_instructions']:
                 action_lines.append(f"   1. {acid_safety['split_instructions']} → Wait {wait_acid}")
             else:
-                action_lines.append(f"   1. Add {acid_ml:.0f}ml {hcl}% HCl → Wait {wait_acid}")
+                action_lines.append(f"   1. Add {self.fmt_acid(acid_ml)} {hcl}% HCl → Wait {wait_acid}")
             
             for warning in acid_safety['warnings']:
                 action_lines.append(f"      ⚠️ {warning}")
@@ -3325,7 +3371,7 @@ class PoolChemistryApp:
             if acid_safety['split_instructions']:
                 action_lines.append(f"   {acid_safety['split_instructions']} → Wait {wait_acid}")
             else:
-                action_lines.append(f"   Add {acid_ml:.0f}ml {hcl}% HCl → Wait {wait_acid}")
+                action_lines.append(f"   Add {self.fmt_acid(acid_ml)} {hcl}% HCl → Wait {wait_acid}")
             
             for warning in acid_safety['warnings']:
                 action_lines.append(f"   ⚠️ {warning}")
@@ -3408,7 +3454,7 @@ class PoolChemistryApp:
                     if acid_safety['split_instructions']:
                         guidance.append(f"   • {acid_safety['split_instructions']}")
                     else:
-                        guidance.append(f"   • Add {safe_acid_ml:.0f} ml {hcl}% HCl")
+                        guidance.append(f"   • Add {self.fmt_acid(safe_acid_ml)} {hcl}% HCl")
                     
                     guidance.append("   • Wait 30 minutes, then retest pH")
                     
@@ -3458,7 +3504,7 @@ class PoolChemistryApp:
                 acid_ml = (quick_drop / 0.1) * CALCULATION_CONSTANTS['ACID_PH_DOSE'] * (V / 10000) * (31.45 / hcl)
                 actions.append(
                     f"SLAM ACTIVE: pH too high ({pH:.2f}) for effective chlorine\n"
-                    f"   Quick adjustment to ~7.8: Add {acid_ml:.0f} ml {hcl}% HCl\n"
+                    f"   Quick adjustment to ~7.8: Add {self.fmt_acid(acid_ml)} {hcl}% HCl\n"
                     f"   → Wait 30 min, retest pH, then continue SLAM"
                 )
                 return actions
@@ -3494,7 +3540,7 @@ class PoolChemistryApp:
             
             actions.append(
                 f"🚨 EMERGENCY: Chlorine at {chlorine:.1f} ppm, algae risk high\n"
-                f"   1. Quick pH adjustment: Add {acid_ml:.0f} ml {hcl}% HCl{high_dose_note} → Wait 1 hr\n"
+                f"   1. Quick pH adjustment: Add {self.fmt_acid(acid_ml)} {hcl}% HCl{high_dose_note} → Wait 1 hr\n"
                 f"   2. RETEST pH. Once pH ≤ 7.8, BEGIN SLAM IMMEDIATELY\n"
                 f"   Target shock level: {shock_target:.1f} ppm{cya_note}"
             )
@@ -3534,7 +3580,7 @@ class PoolChemistryApp:
             context_prefix = "POST-SLAM " if slam_context == 'post_slam' else ""
             actions.append(
                 f"{context_prefix}pH high ({pH:.2f}){safety_note}:\n"
-                f"   Add {acid_safety['safe_amount']:.0f} ml {hcl}% HCl{warning_msg}\n"
+                f"   Add {self.fmt_acid(acid_safety['safe_amount'])} {hcl}% HCl{warning_msg}\n"
                 f"   → Wait 1 hour, RETEST pH before adding more acid"
             )
             
@@ -3628,7 +3674,7 @@ class PoolChemistryApp:
             actions.append(
                 f"{context_prefix}Alkalinity high ({alkalinity} ppm) – pH unknown:\n"
                 f"   CAUTION: Acid will lower pH\n"
-                f"   Add {acid_ml:.0f} ml {hcl}% HCl{high_dose_note} → Wait {wait_acid}\n"
+                f"   Add {self.fmt_acid(acid_ml)} {hcl}% HCl{high_dose_note} → Wait {wait_acid}\n"
                 f"   → TEST pH FIRST — may need aeration {wait_aer} after"
             )
         
@@ -3963,7 +4009,8 @@ class PoolChemistryApp:
                 pump=pump if pump and pump > 0 else None,
                 slam_mode=slam_status,
                 clarity=clarity_display,
-                overnight_test=overnight_test
+                overnight_test=overnight_test,
+                acid_weight_mode=self.app_state.config.get('acid_weight_mode', False)
             )
             
             # Detect SLAM context
@@ -4547,6 +4594,7 @@ class PoolChemistryApp:
             'overnight_test': 'not_tested',
             'previous_water_clarity': 'crystal_clear',
             'previous_slam_mode': False,
+            'acid_weight_mode': False,
             'last_seen_date': None
         }
         
@@ -4597,6 +4645,8 @@ class PoolChemistryApp:
                                 config['previous_water_clarity'] = v
                         elif k == 'previous_slam_mode':
                             config['previous_slam_mode'] = v.lower() == 'true' if v else False
+                        elif k == 'acid_weight_mode':
+                            config['acid_weight_mode'] = v.lower() == 'true' if v else False
                         elif k == 'last_seen_date':
                             config['last_seen_date'] = v
             except Exception as e:
@@ -4716,6 +4766,8 @@ def save_config(config, path, app_instance=None):
                 curr_slam = app_instance.slam_mode_var.get() if hasattr(app_instance, 'slam_mode_var') else False
                 config['previous_water_clarity'] = curr_clarity
                 config['previous_slam_mode'] = str(curr_slam)
+                if hasattr(app_instance, 'acid_weight_mode_var') and app_instance.acid_weight_mode_var:
+                    config['acid_weight_mode'] = str(app_instance.acid_weight_mode_var.get())
                 config['last_seen_date'] = datetime.now().strftime('%Y-%m-%d')
 
                 for field, key in [

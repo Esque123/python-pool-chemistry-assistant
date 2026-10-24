@@ -108,12 +108,12 @@ class GuidanceBuilder:
         self._add_lines(OutputSection.HEADER, lines)
         return self
     
-    def add_parameters(self, volume: Optional[float] = None, pump: Optional[float] = None, 
-                       slam_mode: Optional[str] = None, clarity: Optional[str] = None, 
-                       overnight_test: Optional[str] = None):
+    def add_parameters(self, volume: Optional[float] = None, pump: Optional[float] = None,
+                       slam_mode: Optional[str] = None, clarity: Optional[str] = None,
+                       overnight_test: Optional[str] = None, acid_weight_mode: Optional[bool] = None):
         """Add pool parameters section."""
         param_parts = []
-        
+
         if volume is not None:
             param_parts.append(f"Volume={volume:.0f}L")
         if pump is not None and pump > 0:
@@ -125,6 +125,8 @@ class GuidanceBuilder:
         if overnight_test is not None:
             overnight_display = overnight_test.replace('_', ' ').title()
             param_parts.append(f"Overnight={overnight_display}")
+        if acid_weight_mode is not None:
+            param_parts.append(f"Acid={'weight (g)' if acid_weight_mode else 'volume (ml)'}")
         
         if param_parts:
             lines = [
