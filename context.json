@@ -162,6 +162,15 @@
     ]
   },
 
+  "owner_pool_values_backup": {
+    "_meta": "Recovery backup of the owner's stable pool-specific config values, kept here because pool_config.txt is gitignored personal runtime data with no automatic backup (see ai_secrets_handling) and was once silently wiped. Only the stable values belong here — NOT the transient session state (water_clarity, overnight_test, slam mode flags, last_seen_date, history_path), which is meant to change every run. If these ever go missing from pool_config.txt again, restore them from here. Keep in sync whenever the owner changes a pool value.",
+    "pool_volume": "7250 (litres)",
+    "hcl_percent": "31.45",
+    "bleach_percent": "12.5",
+    "cal_hypo_percent": "65.0",
+    "pump_flow_rate": "10000.0 (L/h)"
+  },
+
   "recent_fixes": [
     "Added an opt-in 'measure acid by weight' mode. Kevin doses acid off a kitchen scale whose 'ml' setting actually weighs grams (it assumes water's 1 ml = 1 g); HCl is ~1.16x denser, so weighing the raw ml figure under-dosed acid ~14% at 31.45%. New module-level hcl_density(pct) (linear rho = 1.0 + 0.005*pct, ~1% accurate 0-35%) and PoolChemistryApp.fmt_acid(ml), which renders every acid dose as grams (ml * density) when config.acid_weight_mode is on, else the unchanged 'X ml'. All internal dose/split math stays in ml (so the V*0.015 split thresholds are untouched) -- only the display converts. Routed all acid HCl output lines, the calculate_safe_doses acid split-instruction numbers, and get_high_dose_note through fmt_acid. Added a '⚖️ Measure acid by weight' checkbox to the config panel, persisted as acid_weight_mode in pool_config.txt (load_config default False; save_config writes it). Mirrored the whole feature in MobilePoolTool (Settings toggle + AppSettings/PoolConfig.acidWeightMode + fmtAcid across poolCalculations/chemicalCalculations/saltWaterCalculations). Verified 120 ml @31.45% -> 139 g, @15% -> 129 g, a headless Tk build, and mobile tsc --noEmit clean. The toggle persists immediately on change (on_acid_weight_mode_toggle writes acid_weight_mode to pool_config.txt, not only when Analyze runs), and every report's Parameters line now states Acid=weight (g) / volume (ml) via GuidanceBuilder.add_parameters, so the full report saved to history records which mode produced it.",
     "Synced the context.json boilerplate (the ai_* instruction fields + the generic section _meta blocks) forward to Kevin's current master template, which this file had fallen behind on: ai_usage, ai_maintenance, ai_current_state_vs_history (kept this project's real section list, added the navigational-vs-expensive-to-rediscover guidance), ai_prune_on_drift, ai_context_updates and ai_token_warning (now dual-mode: direct-file-access vs chat-only), project._meta (now documents file_name), and the core_features/file_structure/key_rules/recommended_improvements _meta blocks. Deliberately preserved the project-specific ai_secrets_handling and dependencies._meta, and kept the ai_git_workflow field (not in the template -- Kevin is adding it to the template himself). No code change; project.version unchanged.",
