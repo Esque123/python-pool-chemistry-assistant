@@ -135,6 +135,48 @@ def get_clarity_internal_key(display_name):
     return 'crystal_clear'
 
 # ==============================
+# Cal-Hypo product presets
+# ==============================
+# Each entry: internal mode key, dropdown display label, available-chlorine %.
+# "custom" carries no fixed % - the user types their own strength instead.
+# HTH Granular+ Mineralsoft is 60% (600 g/kg); generic cal-hypo is usually 65%.
+CAL_HYPO_OPTIONS = [
+    ("mineralsoft", "HTH Granular+ Mineralsoft (60%)", 60.0),
+    ("generic",     "Generic (65%)",                    65.0),
+    ("custom",      "Custom",                           None),
+]
+
+def cal_hypo_label_for_mode(mode):
+    for key, label, _pct in CAL_HYPO_OPTIONS:
+        if key == mode:
+            return label
+    return "Custom"
+
+def cal_hypo_mode_for_label(label):
+    for key, lbl, _pct in CAL_HYPO_OPTIONS:
+        if lbl == label:
+            return key
+    return "custom"
+
+def cal_hypo_percent_for_mode(mode):
+    for key, _label, pct in CAL_HYPO_OPTIONS:
+        if key == mode:
+            return pct
+    return None
+
+def cal_hypo_mode_from_percent(percent):
+    """Pick the preset whose fixed % matches the saved value, else 'custom'.
+    Used as a fallback when an older config has no stored cal_hypo_mode."""
+    try:
+        p = float(percent)
+    except (TypeError, ValueError):
+        return "custom"
+    for key, _label, pct in CAL_HYPO_OPTIONS:
+        if pct is not None and abs(pct - p) < 1e-9:
+            return key
+    return "custom"
+
+# ==============================
 # AppState Class
 # ==============================
 class AppState:
@@ -1190,6 +1232,8 @@ class PoolChemistryApp:
         # ADD TYPE HINTS
         self.entry_volume: tk.Entry
         self.entry_cal_hypo: tk.Entry
+        self.cal_hypo_mode_var: tk.StringVar
+        self.cal_hypo_combo: ttk.Combobox
         self.entry_hcl: tk.Entry
         self.entry_bleach: tk.Entry
         self.entry_pump_flow: tk.Entry
@@ -1308,12 +1352,37 @@ class PoolChemistryApp:
         self.entry_bleach.pack(fill="x")
         ToolTip(self.entry_bleach, "Typical: 5–15%")
         
-        # Cal-Hypo %
-        tk.Label(cf, text="Cal-Hypo (%):").pack(anchor="w")
-        self.entry_cal_hypo = tk.Entry(cf)
+        # Cal-Hypo - pick a product preset or enter a custom strength
+        tk.Label(cf, text="Cal-Hypo:").pack(anchor="w")
+        self.cal_hypo_mode_var = tk.StringVar()
+        self.cal_hypo_combo = ttk.Combobox(
+            cf, textvariable=self.cal_hypo_mode_var,
+            values=[label for _key, label, _pct in CAL_HYPO_OPTIONS],
+            state="readonly", width=25,
+        )
+        self.cal_hypo_combo.pack(fill="x")
+        ToolTip(self.cal_hypo_combo,
+                "Available-chlorine strength of your granular chlorine. "
+                "HTH Granular+ Mineralsoft is 60% (600 g/kg); generic cal-hypo is "
+                "usually 65% (650 g/kg). Pick Custom to type another value.")
+
+        # Custom strength entry - numbers only; editable only when 'Custom' is
+        # selected. For a preset it holds that fixed % (locked read-only) so the
+        # analysis and save paths can keep reading self.entry_cal_hypo unchanged.
+        vcmd = (self.root.register(self._validate_cal_hypo_input), '%P')
+        self.entry_cal_hypo = tk.Entry(cf, validate="key", validatecommand=vcmd)
         self.entry_cal_hypo.insert(0, f"{self.app_state.config['cal_hypo_percent']:g}")
         self.entry_cal_hypo.pack(fill="x")
-        ToolTip(self.entry_cal_hypo, "Calcium Hypochlorite percentage (65% = 650g/kg, 73% = 730g/kg)")
+        ToolTip(self.entry_cal_hypo,
+                "Custom Calcium Hypochlorite percentage, numbers only "
+                "(65% = 650g/kg, 73% = 730g/kg)")
+
+        # Initialise dropdown + entry state from saved config.
+        initial_mode = self.app_state.config.get('cal_hypo_mode') \
+            or cal_hypo_mode_from_percent(self.app_state.config.get('cal_hypo_percent', 65.0))
+        self.cal_hypo_combo.set(cal_hypo_label_for_mode(initial_mode))
+        self.cal_hypo_combo.bind("<<ComboboxSelected>>", self.on_cal_hypo_change)
+        self._apply_cal_hypo_mode(initial_mode)
 
         # Pump Flow
         tk.Label(cf, text="Pump Flow (L/h - optional):").pack(anchor="w")
@@ -2111,7 +2180,6 @@ class PoolChemistryApp:
                 self.entry_volume: str(self.app_state.config.get('pool_volume', "7250")),
                 self.entry_hcl: str(self.app_state.config.get('hcl_percent', "31.45")),
                 self.entry_bleach: str(self.app_state.config.get('bleach_percent', "12.5")),
-                self.entry_cal_hypo: "65",
                 self.entry_pump_flow: pump_display,
             }
             
@@ -2131,6 +2199,13 @@ class PoolChemistryApp:
             # Reset combobox
             if self.clarity_combo:
                 self.clarity_combo.set(get_clarity_display_name("crystal_clear"))
+
+            # Reset Cal-Hypo dropdown to Generic (65%)
+            if self.cal_hypo_combo:
+                self.cal_hypo_combo.set(cal_hypo_label_for_mode('generic'))
+                self._apply_cal_hypo_mode('generic')
+                self.app_state.config['cal_hypo_mode'] = 'generic'
+                self.app_state.config['cal_hypo_percent'] = 65.0
             
             # Reset boolean/string vars
             if self.slam_mode_var:
@@ -2199,6 +2274,51 @@ class PoolChemistryApp:
         """Calculate TA increase from soda ash."""
         return (grams / 100) * 14 * (10000 / pool_volume_liters)
     
+    def _validate_cal_hypo_input(self, proposed):
+        """Allow only a non-negative decimal number (or empty) in the custom
+        Cal-Hypo field. Returns True to accept the keystroke, False to reject."""
+        if proposed == "":
+            return True
+        try:
+            float(proposed)
+        except ValueError:
+            return False
+        # Reject negatives and a bare sign; a single leading '.' is fine.
+        return not proposed.startswith("-")
+
+    def _apply_cal_hypo_mode(self, mode):
+        """Sync the custom-% entry to the selected preset.
+
+        For a preset (Mineralsoft/Generic) the entry shows that fixed % and is
+        locked read-only; for 'Custom' it becomes editable so the user can type
+        their own strength. self.entry_cal_hypo always holds the effective %, so
+        the analysis and save paths read it unchanged regardless of mode.
+        """
+        if not self.entry_cal_hypo:
+            return
+        preset_pct = cal_hypo_percent_for_mode(mode)
+        # Editing a read-only Entry requires flipping to normal first.
+        self.entry_cal_hypo.config(state="normal")
+        if preset_pct is not None:
+            self.entry_cal_hypo.delete(0, tk.END)
+            self.entry_cal_hypo.insert(0, f"{preset_pct:g}")
+            self.entry_cal_hypo.config(state="readonly")
+
+    def on_cal_hypo_change(self, event=None):
+        """Persist the Cal-Hypo product choice immediately so it survives even
+        if the user closes the app without running an analysis (mirrors the
+        acid-weight toggle)."""
+        mode = cal_hypo_mode_for_label(self.cal_hypo_mode_var.get())
+        self._apply_cal_hypo_mode(mode)
+        self.app_state.config['cal_hypo_mode'] = mode
+        preset_pct = cal_hypo_percent_for_mode(mode)
+        if preset_pct is not None:
+            self.app_state.config['cal_hypo_percent'] = preset_pct
+        elif self.entry_cal_hypo:
+            # Custom mode: focus the field so the user can type right away.
+            self.entry_cal_hypo.focus_set()
+        save_config(self.app_state.config, self.app_state.config_file, self)
+
     def on_acid_weight_mode_toggle(self):
         """Persist the acid measurement-unit preference immediately when toggled,
         so it survives even if the user closes the app without running an analysis."""
@@ -3205,10 +3325,10 @@ class PoolChemistryApp:
             ta_status = self.get_ta_status(alkalinity)
             
             if ph_state == "normal" and ta_state == "normal":
-                actions.append(f"   • pH: {ph_status}")
-                actions.append(f"   • TA: {ta_status}")
+                actions.append(f"• pH: {ph_status}")
+                actions.append(f"• TA: {ta_status}")
                 if pH >= 7.0 and alkalinity >= 80:
-                    actions.append("     ✅ pH and TA in ideal range for stability")
+                    actions.append("  ✅ pH and TA in ideal range for stability")
                 return actions
         
         # ===== COMBINED pH/TA ACTIONS FOR NORMAL AND POST-SLAM MODES =====
@@ -3548,10 +3668,10 @@ class PoolChemistryApp:
         
         if slam_context == 'normal':
             ph_status = self.get_ph_status(pH)
-            actions.append(f"   • pH: {ph_status}")
+            actions.append(f"• pH: {ph_status}")
             
             if pH >= low and pH <= high:
-                actions.append("     ✅ In target range (7.2-7.8)")
+                actions.append("  ✅ In target range (7.2-7.8)")
                 return actions
         
         if pH > high:
@@ -3651,10 +3771,10 @@ class PoolChemistryApp:
         
         if slam_context == 'normal':
             ta_status = self.get_ta_status(alkalinity)
-            actions.append(f"   • TA: {ta_status}")
+            actions.append(f"• TA: {ta_status}")
             
             if alkalinity >= low and alkalinity <= high:
-                actions.append("     ✅ In target range (80-120 ppm)")
+                actions.append("  ✅ In target range (80-120 ppm)")
                 return actions
         
         if alkalinity < low:
@@ -3875,10 +3995,10 @@ class PoolChemistryApp:
         
         if slam_context == 'normal':
             cya_status = self.get_cya_status(cya)
-            actions.append(f"   • CYA: {cya_status}")
+            actions.append(f"• CYA: {cya_status}")
             
             if cya >= low and cya <= high:
-                actions.append("     ✅ In target range (30-50 ppm)")
+                actions.append("  ✅ In target range (30-50 ppm)")
                 return actions
         
         if cya < low:
@@ -3940,10 +4060,10 @@ class PoolChemistryApp:
         
         if slam_context == 'normal':
             ca_status = self.get_calcium_status(calcium)
-            actions.append(f"   • Calcium: {ca_status}")
+            actions.append(f"• Calcium: {ca_status}")
             
             if calcium >= low and calcium <= high:
-                actions.append("     ✅ In target range (200-400 ppm)")
+                actions.append("  ✅ In target range (200-400 ppm)")
                 return actions
         
         if calcium < low:
@@ -4589,6 +4709,7 @@ class PoolChemistryApp:
             'hcl_percent': 31.45,
             'bleach_percent': 12.5,
             'cal_hypo_percent': 65.0,
+            'cal_hypo_mode': None,  # derived below from the file / percent if unset
             'pump_flow_rate': None,
             'water_clarity': 'crystal_clear',
             'overnight_test': 'not_tested',
@@ -4637,6 +4758,9 @@ class PoolChemistryApp:
                                         internal_key = clarity
                                         break
                                 config[k] = internal_key or 'crystal_clear'
+                        elif k == 'cal_hypo_mode':
+                            if v in [key for key, _label, _pct in CAL_HYPO_OPTIONS]:
+                                config[k] = v
                         elif k == 'overnight_test':
                             if v in ['not_tested', 'passed', 'failed']:
                                 config[k] = v
@@ -4652,7 +4776,12 @@ class PoolChemistryApp:
             except Exception as e:
                 # Continue with defaults on error
                 pass
-        
+
+        # Legacy configs predate cal_hypo_mode - infer it from the saved strength
+        # so a 60%/65% value maps to the matching preset and anything else to Custom.
+        if not config.get('cal_hypo_mode'):
+            config['cal_hypo_mode'] = cal_hypo_mode_from_percent(config.get('cal_hypo_percent', 65.0))
+
         # Ensure history path is writable
         history_dir = os.path.dirname(config['history_path']) or exe_dir
         if not os.access(history_dir, os.W_OK):
@@ -4768,6 +4897,8 @@ def save_config(config, path, app_instance=None):
                 config['previous_slam_mode'] = str(curr_slam)
                 if hasattr(app_instance, 'acid_weight_mode_var') and app_instance.acid_weight_mode_var:
                     config['acid_weight_mode'] = str(app_instance.acid_weight_mode_var.get())
+                if getattr(app_instance, 'cal_hypo_mode_var', None):
+                    config['cal_hypo_mode'] = cal_hypo_mode_for_label(app_instance.cal_hypo_mode_var.get())
                 config['last_seen_date'] = datetime.now().strftime('%Y-%m-%d')
 
                 for field, key in [
