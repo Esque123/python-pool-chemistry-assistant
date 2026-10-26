@@ -142,7 +142,7 @@ def get_clarity_internal_key(display_name):
 # HTH Granular+ Mineralsoft is 60% (600 g/kg); generic cal-hypo is usually 65%.
 CAL_HYPO_OPTIONS = [
     ("mineralsoft", "HTH Granular+ Mineralsoft (60%)", 60.0),
-    ("generic",     "Generic (65%)",                    65.0),
+    ("generic",     "Blu52 Granular / Generic (65%)",   65.0),
     ("custom",      "Custom",                           None),
 ]
 
@@ -3331,8 +3331,29 @@ class PoolChemistryApp:
                     actions.append("  ✅ pH and TA in ideal range for stability")
                 return actions
         
+        # ===== PRE-SLAM: optional nudge of in-range pH toward the SLAM-ideal 7.2 =====
+        # A SLAM shocks more effectively nearer 7.2 (more of the chlorine is active
+        # hypochlorous acid), so when pH sits in the normal band but above 7.2 - and
+        # TA is normal, so none of the TA scenarios below would move pH anyway - offer
+        # an optional acid dose. pH > 7.8 and the off-range TA cases are still handled
+        # by the branches further down.
+        if slam_context == 'pre_slam' and ph_state == "normal" and ta_state == "normal" and pH > 7.2:
+            ph_down = pH - 7.2
+            acid_ml = (ph_down / 0.1) * CALCULATION_CONSTANTS['ACID_PH_DOSE'] * (V / 10000) * (31.45 / hcl)
+            acid_safety = self.calculate_safe_doses('acid', acid_ml, V, config)
+            action_lines = [f"pH {pH:.2f} is in range, but SLAM works best nearer 7.2:"]
+            if acid_safety['split_instructions']:
+                action_lines.append(f"   • Optional: {acid_safety['split_instructions']} → Wait {wait_acid}")
+            else:
+                action_lines.append(f"   • Optional: Add {self.fmt_acid(acid_ml)} {hcl}% HCl to lower pH to ~7.2 → Wait {wait_acid}")
+            action_lines.append(f"   • Starting at pH {pH:.2f} is fine too — this just boosts chlorine effectiveness")
+            for warning in acid_safety['warnings']:
+                action_lines.append(f"   ⚠️ {warning}")
+            actions.append("\n".join(action_lines))
+            return actions
+
         # ===== COMBINED pH/TA ACTIONS FOR NORMAL AND POST-SLAM MODES =====
-        
+
         # Scenario: pH normal/high + TA high
         if (ph_state == "normal" and ta_state == "high") or (ph_state == "high" and ta_state == "high"):
             ta_reduction_needed = alkalinity - target_ta
@@ -3673,7 +3694,25 @@ class PoolChemistryApp:
             if pH >= low and pH <= high:
                 actions.append("  ✅ In target range (7.2-7.8)")
                 return actions
-        
+
+        # Pre-SLAM: optional nudge of in-range pH toward 7.2 for a more effective
+        # shock (same rationale as the combined pH/TA path). pH > 7.8 still falls
+        # through to the acid branch below.
+        if slam_context == 'pre_slam' and low <= pH <= high and pH > 7.2:
+            ph_down = pH - 7.2
+            acid_ml = (ph_down / 0.1) * CALCULATION_CONSTANTS['ACID_PH_DOSE'] * (V / 10000) * (31.45 / hcl)
+            acid_safety = self.calculate_safe_doses('acid', acid_ml, V, config)
+            action_lines = [f"pH {pH:.2f} is in range, but SLAM works best nearer 7.2:"]
+            if acid_safety['split_instructions']:
+                action_lines.append(f"   • Optional: {acid_safety['split_instructions']} → Wait {wait_acid}")
+            else:
+                action_lines.append(f"   • Optional: Add {self.fmt_acid(acid_ml)} {hcl}% HCl to lower pH to ~7.2 → Wait {wait_acid}")
+            action_lines.append(f"   • Starting at pH {pH:.2f} is fine too — this just boosts chlorine effectiveness")
+            for warning in acid_safety['warnings']:
+                action_lines.append(f"   ⚠️ {warning}")
+            actions.append("\n".join(action_lines))
+            return actions
+
         if pH > high:
             drop = pH - target
             
