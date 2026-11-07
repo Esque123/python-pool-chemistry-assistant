@@ -40,6 +40,12 @@ CALCULATION_CONSTANTS = {
     'CALCIUM_DOSE': 11,            # g CaCl2 (100%) to raise CH by 1 ppm in 10,000L
 }
 
+# ==============================
+# CHEMICAL DISPLAY NAMES (scientific name shown in brackets in report text)
+# ==============================
+ACID_DISPLAY_NAME = "HCl (Hydrochloric Acid)"
+BAKING_SODA_DISPLAY_NAME = "Baking Soda (Sodium Bicarbonate)"
+
 
 def hcl_density(pct):
     """Approximate density (kg/L ≈ g/ml) of aqueous HCl at a given w/w %.
@@ -2702,7 +2708,7 @@ class PoolChemistryApp:
         elif chemical_type == 'baking_soda':
             # Baking soda is generally safe, but note the amount
             if amount_needed > 5000:  # 5kg is a lot
-                warning = f"⚠️ Large baking soda dose ({amount_needed:.0f}g)"
+                warning = f"⚠️ Large {BAKING_SODA_DISPLAY_NAME} dose ({amount_needed:.0f}g)"
                 
                 if is_slam:
                     warning += "\n   • During SLAM, add slowly over 1-2 hours to avoid cloudiness"
@@ -3279,7 +3285,7 @@ class PoolChemistryApp:
                     if acid_safety['split_instructions']:
                         action_lines.append(f"   • {acid_safety['split_instructions']}")
                     else:
-                        action_lines.append(f"   • Add {self.fmt_acid(safe_acid_ml)} {hcl}% HCl")
+                        action_lines.append(f"   • Add {self.fmt_acid(safe_acid_ml)} {hcl}% {ACID_DISPLAY_NAME}")
                     
                     action_lines.append("   • Wait 30 minutes, then retest pH")
                     
@@ -3345,7 +3351,7 @@ class PoolChemistryApp:
             if acid_safety['split_instructions']:
                 action_lines.append(f"   • Optional: {acid_safety['split_instructions']} → Wait {wait_acid}")
             else:
-                action_lines.append(f"   • Optional: Add {self.fmt_acid(acid_ml)} {hcl}% HCl to lower pH to ~7.2 → Wait {wait_acid}")
+                action_lines.append(f"   • Optional: Add {self.fmt_acid(acid_ml)} {hcl}% {ACID_DISPLAY_NAME} to lower pH to ~7.2 → Wait {wait_acid}")
             action_lines.append(f"   • Starting at pH {pH:.2f} is fine too — this just boosts chlorine effectiveness")
             for warning in acid_safety['warnings']:
                 action_lines.append(f"   ⚠️ {warning}")
@@ -3369,13 +3375,13 @@ class PoolChemistryApp:
             action_lines = [
                 f"{context_prefix}pH{'normal' if ph_state == 'normal' else 'high'} ({pH:.2f}), TA high ({alkalinity} ppm):",
                 "   Use stepwise acid/aeration to safely lower TA:",
-                "   1. Add HCl:"
+                f"   1. Add {ACID_DISPLAY_NAME}:"
             ]
             
             if acid_safety['split_instructions']:
                 action_lines.append(f"      {acid_safety['split_instructions']}")
             else:
-                action_lines.append(f"      {self.fmt_acid(acid_ml)} {hcl}% HCl")
+                action_lines.append(f"      {self.fmt_acid(acid_ml)} {hcl}% {ACID_DISPLAY_NAME}")
             
             action_lines.append(f"      → Wait {wait_acid}")
             action_lines.append(f"   2. Aerate {wait_aer} to raise pH back to ~7.6")
@@ -3407,7 +3413,7 @@ class PoolChemistryApp:
             
             action_lines = [
                 f"pH low ({pH:.2f}), TA low ({alkalinity} ppm):",
-                f"   1. Add {baking_g:.0f}g Baking Soda → Wait {wait_alk}"
+                f"   1. Add {baking_g:.0f}g {BAKING_SODA_DISPLAY_NAME} → Wait {wait_alk}"
             ]
             
             for warning in baking_safety['warnings']:
@@ -3455,7 +3461,7 @@ class PoolChemistryApp:
             
             action_lines = [
                 f"pH normal, TA low ({alkalinity} ppm):",
-                f"   Add {baking_g:.0f}g Baking Soda → Wait {wait_alk} → Retest"
+                f"   Add {baking_g:.0f}g {BAKING_SODA_DISPLAY_NAME} → Wait {wait_alk} → Retest"
             ]
             
             for warning in baking_safety['warnings']:
@@ -3483,7 +3489,7 @@ class PoolChemistryApp:
             if acid_safety['split_instructions']:
                 action_lines.append(f"   1. {acid_safety['split_instructions']} → Wait {wait_acid}")
             else:
-                action_lines.append(f"   1. Add {self.fmt_acid(acid_ml)} {hcl}% HCl → Wait {wait_acid}")
+                action_lines.append(f"   1. Add {self.fmt_acid(acid_ml)} {hcl}% {ACID_DISPLAY_NAME} → Wait {wait_acid}")
             
             for warning in acid_safety['warnings']:
                 action_lines.append(f"      ⚠️ {warning}")
@@ -3492,7 +3498,7 @@ class PoolChemistryApp:
             if baking_safety['split_instructions']:
                 action_lines.append(f"   2. {baking_safety['split_instructions']} → Wait {wait_alk}")
             else:
-                action_lines.append(f"   2. Add {baking_g:.0f}g Baking Soda → Wait {wait_alk}")
+                action_lines.append(f"   2. Add {baking_g:.0f}g {BAKING_SODA_DISPLAY_NAME} → Wait {wait_alk}")
             
             for warning in baking_safety['warnings']:
                 action_lines.append(f"      ⚠️ {warning}")
@@ -3512,7 +3518,7 @@ class PoolChemistryApp:
             if acid_safety['split_instructions']:
                 action_lines.append(f"   {acid_safety['split_instructions']} → Wait {wait_acid}")
             else:
-                action_lines.append(f"   Add {self.fmt_acid(acid_ml)} {hcl}% HCl → Wait {wait_acid}")
+                action_lines.append(f"   Add {self.fmt_acid(acid_ml)} {hcl}% {ACID_DISPLAY_NAME} → Wait {wait_acid}")
             
             for warning in acid_safety['warnings']:
                 action_lines.append(f"   ⚠️ {warning}")
@@ -3595,7 +3601,7 @@ class PoolChemistryApp:
                     if acid_safety['split_instructions']:
                         guidance.append(f"   • {acid_safety['split_instructions']}")
                     else:
-                        guidance.append(f"   • Add {self.fmt_acid(safe_acid_ml)} {hcl}% HCl")
+                        guidance.append(f"   • Add {self.fmt_acid(safe_acid_ml)} {hcl}% {ACID_DISPLAY_NAME}")
                     
                     guidance.append("   • Wait 30 minutes, then retest pH")
                     
@@ -3645,7 +3651,7 @@ class PoolChemistryApp:
                 acid_ml = (quick_drop / 0.1) * CALCULATION_CONSTANTS['ACID_PH_DOSE'] * (V / 10000) * (31.45 / hcl)
                 actions.append(
                     f"SLAM ACTIVE: pH too high ({pH:.2f}) for effective chlorine\n"
-                    f"   Quick adjustment to ~7.8: Add {self.fmt_acid(acid_ml)} {hcl}% HCl\n"
+                    f"   Quick adjustment to ~7.8: Add {self.fmt_acid(acid_ml)} {hcl}% {ACID_DISPLAY_NAME}\n"
                     f"   → Wait 30 min, retest pH, then continue SLAM"
                 )
                 return actions
@@ -3681,7 +3687,7 @@ class PoolChemistryApp:
             
             actions.append(
                 f"🚨 EMERGENCY: Chlorine at {chlorine:.1f} ppm, algae risk high\n"
-                f"   1. Quick pH adjustment: Add {self.fmt_acid(acid_ml)} {hcl}% HCl{high_dose_note} → Wait 1 hr\n"
+                f"   1. Quick pH adjustment: Add {self.fmt_acid(acid_ml)} {hcl}% {ACID_DISPLAY_NAME}{high_dose_note} → Wait 1 hr\n"
                 f"   2. RETEST pH. Once pH ≤ 7.8, BEGIN SLAM IMMEDIATELY\n"
                 f"   Target shock level: {shock_target:.1f} ppm{cya_note}"
             )
@@ -3706,7 +3712,7 @@ class PoolChemistryApp:
             if acid_safety['split_instructions']:
                 action_lines.append(f"   • Optional: {acid_safety['split_instructions']} → Wait {wait_acid}")
             else:
-                action_lines.append(f"   • Optional: Add {self.fmt_acid(acid_ml)} {hcl}% HCl to lower pH to ~7.2 → Wait {wait_acid}")
+                action_lines.append(f"   • Optional: Add {self.fmt_acid(acid_ml)} {hcl}% {ACID_DISPLAY_NAME} to lower pH to ~7.2 → Wait {wait_acid}")
             action_lines.append(f"   • Starting at pH {pH:.2f} is fine too — this just boosts chlorine effectiveness")
             for warning in acid_safety['warnings']:
                 action_lines.append(f"   ⚠️ {warning}")
@@ -3739,7 +3745,7 @@ class PoolChemistryApp:
             context_prefix = "POST-SLAM " if slam_context == 'post_slam' else ""
             actions.append(
                 f"{context_prefix}pH high ({pH:.2f}){safety_note}:\n"
-                f"   Add {self.fmt_acid(acid_safety['safe_amount'])} {hcl}% HCl{warning_msg}\n"
+                f"   Add {self.fmt_acid(acid_safety['safe_amount'])} {hcl}% {ACID_DISPLAY_NAME}{warning_msg}\n"
                 f"   → Wait 1 hour, RETEST pH before adding more acid"
             )
             
@@ -3822,7 +3828,7 @@ class PoolChemistryApp:
             context_prefix = "POST-SLAM " if slam_context == 'post_slam' else ""
             actions.append(
                 f"{context_prefix}Alkalinity low ({alkalinity} ppm) – pH unknown:\n"
-                f"   Add {baking_g:.0f} g Baking Soda → Wait {wait_alk}\n"
+                f"   Add {baking_g:.0f} g {BAKING_SODA_DISPLAY_NAME} → Wait {wait_alk}\n"
                 f"   → Retest both pH and alkalinity"
             )
         elif alkalinity > high:
@@ -3833,7 +3839,7 @@ class PoolChemistryApp:
             actions.append(
                 f"{context_prefix}Alkalinity high ({alkalinity} ppm) – pH unknown:\n"
                 f"   CAUTION: Acid will lower pH\n"
-                f"   Add {self.fmt_acid(acid_ml)} {hcl}% HCl{high_dose_note} → Wait {wait_acid}\n"
+                f"   Add {self.fmt_acid(acid_ml)} {hcl}% {ACID_DISPLAY_NAME}{high_dose_note} → Wait {wait_acid}\n"
                 f"   → TEST pH FIRST — may need aeration {wait_aer} after"
             )
         
@@ -4349,7 +4355,7 @@ class PoolChemistryApp:
                 for dose in regular_doses:
                     if _is_acid_dose(dose):
                         dose['warnings'].append(
-                            "HCl and chlorine products react and release chlorine gas. Add them "
+                            f"{ACID_DISPLAY_NAME} and chlorine products react and release chlorine gas. Add them "
                             "separately, with the pump running, in different spots. Wait for the "
                             f"first to fully circulate before adding the next — about {gas_wait[0]:.1f}"
                             f"–{gas_wait[1]:.1f} hrs at your pump's turnover rate."
