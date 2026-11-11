@@ -14,6 +14,7 @@ with SLAM Lifecycle Detection and Smart Recommendations
 
 import os
 import sys
+import math
 import traceback
 import tkinter as tk
 from pathlib import Path
@@ -45,6 +46,31 @@ CALCULATION_CONSTANTS = {
 # ==============================
 ACID_DISPLAY_NAME = "HCl (Hydrochloric Acid)"
 BAKING_SODA_DISPLAY_NAME = "Baking Soda (Sodium Bicarbonate)"
+
+
+# ==============================
+# ACID (HCl) SINGLE-DOSE SAFETY LIMITS
+# ==============================
+# Rule 1: never exceed this fraction of pool volume for swimmer safety (esp. kids).
+# Rule 2: never exceed this fraction of pool volume for equipment/surface safety.
+# Both currently share the same figure; the effective cap used anywhere in the
+# app is min(the two), so they can be split apart later without touching callers.
+ACID_SWIM_SAFE_PCT = 0.015
+ACID_EQUIPMENT_SAFE_PCT = 0.015
+ACID_MIN_DOSE_FRACTION_OF_CAP = 0.3  # below this fraction of the cap, merge into fewer/bigger doses
+
+# ==============================
+# CHLORINE SINGLE-DOSE SAFETY LIMITS (maintenance/normal mode)
+# ==============================
+# These caps apply OUTSIDE an active SLAM shock. During SLAM the whole point is
+# to hit shock level in one go, so calculate_safe_doses deliberately allows a
+# single dose above these figures there (pre-dissolved/broadcast widely) --
+# unlike acid, which is capped the same way regardless of SLAM state.
+LIQUID_CHLORINE_SAFE_PCT = 0.015          # standard ~12.5% bleach
+LIQUID_CHLORINE_WEAK_BLEACH_PCT = 0.02    # <10% bleach needs more volume for the same FC, so a larger safe cap
+LIQUID_CHLORINE_STRONG_BLEACH_PCT = 0.012  # >15% bleach is more concentrated, so a smaller safe cap
+CAL_HYPO_PREDISSOLVE_G_PER_1000L = 25     # above this concentration, pre-dissolving is explicitly flagged
+CAL_HYPO_SPLIT_G_PER_1000L = 50           # above this concentration, splitting into multiple doses is recommended
 
 
 def hcl_density(pct):
@@ -2484,6 +2510,14 @@ class PoolChemistryApp:
             'water_clarity': get_clarity_internal_key(self.clarity_var.get())
         })
 
+    def liquid_chlorine_safe_volume(self, V, bleach_percent):
+        """Single-application volume cap (ml) for liquid chlorine outside an active SLAM shock."""
+        if bleach_percent < 10:
+            return V * LIQUID_CHLORINE_WEAK_BLEACH_PCT
+        elif bleach_percent > 15:
+            return V * LIQUID_CHLORINE_STRONG_BLEACH_PCT
+        return V * LIQUID_CHLORINE_SAFE_PCT
+
     def calculate_safe_doses(self, chemical_type, amount_needed, V, config, context=None):
         """
         Centralized safety calculator for chemical doses.
@@ -2510,91 +2544,55 @@ class PoolChemistryApp:
         is_post_slam = context == 'post_slam' if context else False
         
         if chemical_type == 'acid':
-            # Acid safety: Use the same threshold as get_high_dose_note
-            max_safe_acid = V * 0.015  # 1.5% of pool volume (108.75ml for 7250L)
-            
+            # Rule 1 (swimmer safety) and Rule 2 (equipment/surface safety) caps are
+            # module-level constants; the effective cap is whichever is stricter.
+            max_safe_acid = V * min(ACID_SWIM_SAFE_PCT, ACID_EQUIPMENT_SAFE_PCT)
+
             if amount_needed > max_safe_acid:
                 # Calculate wait time between doses
                 turnover = V / pump if pump else None
                 wait_hours = max(2, turnover * 0.5) if turnover else 2
-                
-                # Calculate how many safe doses this represents
-                safe_dose_count = int(amount_needed / max_safe_acid) + 1
-                
-                # Progressive dosing strategy based on number of doses needed
-                if safe_dose_count == 2:
-                    # 2 doses: 50% now, 50% later
-                    first_dose = amount_needed * 0.5
-                    second_dose = amount_needed * 0.5
-                    
-                    result['safe_amount'] = first_dose
-                    result['split_instructions'] = (
-                        f"⚠️ Split into 2 doses:\n"
-                        f"   • Add {self.fmt_acid(first_dose)} now\n"
-                        f"   • Wait {wait_hours:.1f} hours, then add {self.fmt_acid(second_dose)}"
-                    )
 
-                elif safe_dose_count == 3:
-                    # 3 doses: 50% now, 25% later, 25% final
-                    first_dose = amount_needed * 0.5
-                    second_dose = amount_needed * 0.25
-                    third_dose = amount_needed * 0.25
-                    
-                    result['safe_amount'] = first_dose
-                    result['split_instructions'] = (
-                        f"⚠️ Progressive dosing (3 doses):\n"
-                        f"   • Add {self.fmt_acid(first_dose)} now\n"
-                        f"   • Wait {wait_hours:.1f} hours, retest pH\n"
-                        f"   • Add {self.fmt_acid(second_dose)}\n"
-                        f"   • Wait another {wait_hours:.1f} hours\n"
-                        f"   • Add final {self.fmt_acid(third_dose)} if still needed"
-                    )
+                # Rule 3: first dose is half the total, capped at the safety limit
+                first_dose = min(amount_needed / 2, max_safe_acid)
+                remaining = amount_needed - first_dose
 
-                elif safe_dose_count == 4:
-                    # 4 doses: 40% now, 20% x 3 later
-                    first_dose = amount_needed * 0.4
-                    remaining = amount_needed * 0.6
-                    subsequent = remaining / 3  # 20% each
-                    
-                    result['safe_amount'] = first_dose
-                    result['split_instructions'] = (
-                        f"⚠️ Progressive dosing (4 doses):\n"
-                        f"   • Add {self.fmt_acid(first_dose)} now\n"
-                        f"   • Wait {wait_hours:.1f} hours, retest pH\n"
-                        f"   • Add {self.fmt_acid(subsequent)}\n"
-                        f"   • Wait {wait_hours:.1f} hours, retest\n"
-                        f"   • Add {self.fmt_acid(subsequent)}\n"
-                        f"   • Wait {wait_hours:.1f} hours\n"
-                        f"   • Add final {self.fmt_acid(subsequent)} if needed"
-                    )
+                # Rule 4: split the remainder into ~3 doses; only add more if the cap forces it
+                num_sub_doses = 3
+                if remaining / num_sub_doses > max_safe_acid:
+                    num_sub_doses = math.ceil(remaining / max_safe_acid)
 
-                else:  # 5+ doses - use equal splitting with progressive principle
-                    # For 5+, use 80% of safe limit as base dose
-                    base_dose = max_safe_acid * 0.8
-                    num_doses = int(amount_needed / base_dose) + 1
-                    first_dose = base_dose
-                    remaining = amount_needed - first_dose
-                    subsequent = remaining / (num_doses - 1)
-                    
-                    instruction_lines = [
-                        f"⚠️ EXTREME DOSE - {num_doses}-dose progressive schedule:",
-                        f"   • Add {self.fmt_acid(first_dose)} now"
-                    ]
-                    
-                    for i in range(1, num_doses):
-                        instruction_lines.append(f"   • Wait {wait_hours:.1f} hours, retest pH")
-                        if i == num_doses - 1:
-                            instruction_lines.append(f"   • Add final {self.fmt_acid(subsequent)} if needed")
-                        else:
-                            instruction_lines.append(f"   • Add {self.fmt_acid(subsequent)}")
-                    
-                    result['safe_amount'] = first_dose
-                    result['split_instructions'] = "\n".join(instruction_lines)
+                sub_dose = remaining / num_sub_doses
+
+                # Minimum dose floor: merge the tail into fewer, larger doses rather than
+                # waiting 2 hours just to add a token-sized final dose. Scales with pool
+                # size since it's a fraction of the (volume-based) per-dose cap, not a fixed gram amount.
+                min_dose_ml = max_safe_acid * ACID_MIN_DOSE_FRACTION_OF_CAP
+                while num_sub_doses > 1 and sub_dose < min_dose_ml:
+                    num_sub_doses -= 1
+                    sub_dose = remaining / num_sub_doses
+
+                num_doses = 1 + num_sub_doses
+                header = "⚠️ Split into 2 doses:" if num_doses == 2 else f"⚠️ {num_doses}-dose schedule:"
+                instruction_lines = [
+                    header,
+                    f"   • Add {self.fmt_acid(first_dose)} now HCl"
+                ]
+
+                for i in range(1, num_sub_doses + 1):
+                    instruction_lines.append(f"   • Wait {wait_hours:.1f} hours, retest pH")
+                    if i == num_sub_doses:
+                        instruction_lines.append(f"   • Add final {self.fmt_acid(sub_dose)} if needed HCl")
+                    else:
+                        instruction_lines.append(f"   • Add {self.fmt_acid(sub_dose)} HCl")
+
+                result['safe_amount'] = first_dose
+                result['split_instructions'] = "\n".join(instruction_lines)
 
                 # Context-specific warnings
                 if is_slam:
                     result['warnings'].append("During SLAM, you can add doses more frequently (every 2 hours) to maintain shock level")
-                
+
                 result['single_dose_possible'] = False
         
         elif chemical_type == 'cal_hypo':
@@ -2604,9 +2602,9 @@ class PoolChemistryApp:
             
             result['concentration'] = concentration_g_per_1000L
             
-            if concentration_g_per_1000L > 50:
+            if concentration_g_per_1000L > CAL_HYPO_SPLIT_G_PER_1000L:
                 # Severe concentration - safety warning but DON'T force split during SLAM
-                split_count = max(2, int(concentration_g_per_1000L / 25))
+                split_count = max(2, int(concentration_g_per_1000L / CAL_HYPO_PREDISSOLVE_G_PER_1000L))
                 split_amount = amount_needed / split_count
                 
                 # Store the split info but don't force it during SLAM
@@ -2631,7 +2629,7 @@ class PoolChemistryApp:
                     )
                     result['single_dose_possible'] = False  # Force split in normal mode
                     
-            elif concentration_g_per_1000L > 25:
+            elif concentration_g_per_1000L > CAL_HYPO_PREDISSOLVE_G_PER_1000L:
                 # Moderate concentration - pre-dissolve warning
                 result['split_instructions'] = (
                     f"⚠️ Pre-dissolve {amount_needed:.0f}g of {cal_hypo_percent}% cal-hypo in bucket before adding"
@@ -2651,11 +2649,7 @@ class PoolChemistryApp:
             bleach_percent = config.get('bleach_percent', 12.5)
             
             # Adjust threshold based on concentration
-            volume_threshold = V * 0.015  # 1.5% of pool volume
-            if bleach_percent < 10:  # Weak bleach needs larger volume
-                volume_threshold = V * 0.02  # 2% threshold
-            elif bleach_percent > 15:  # Strong bleach - be more conservative
-                volume_threshold = V * 0.012  # 1.2% threshold
+            volume_threshold = self.liquid_chlorine_safe_volume(V, bleach_percent)
             
             if amount_needed > volume_threshold:
                 turnover = V / pump if pump else None
@@ -3246,9 +3240,11 @@ class PoolChemistryApp:
         
         normal_ph_low, normal_ph_high = ph_range['min'], ph_range['max']
         target_pH = ph_range['target']
+        if slam_context == 'pre_slam':
+            target_pH = 7.2  # SLAM shocks more effectively nearer 7.2 than the normal 7.5 target
         target_ta = ta_range['target']
         normal_ta_low, normal_ta_high = ta_range['min'], ta_range['max']
-        
+
         acid_wait = self.get_waiting_time(V, pump, "acid")
         alk_wait = self.get_waiting_time(V, pump, "alkalinity")
         aer_wait = self.get_waiting_time(V, pump, "aeration")
@@ -3540,8 +3536,10 @@ class PoolChemistryApp:
         
         ph_range = TARGET_RANGES['pH']
         target = ph_range['target']
+        if slam_context == 'pre_slam':
+            target = 7.2  # SLAM shocks more effectively nearer 7.2 than the normal 7.5 target
         low, high = ph_range['min'], ph_range['max']
-        
+
         acid_wait = self.get_waiting_time(V, pump, "acid")
         aer_wait = self.get_waiting_time(V, pump, "aeration")
         wait_acid = f"{acid_wait[0]:.1f}–{acid_wait[1]:.1f} hrs"
@@ -4177,7 +4175,18 @@ class PoolChemistryApp:
                 overnight_test=overnight_test,
                 acid_weight_mode=self.app_state.config.get('acid_weight_mode', False)
             )
-            
+
+            # Add standing safety limits (pool-size-aware)
+            pool_V = local_config['pool_volume_liters']
+            acid_cap_ml = pool_V * min(ACID_SWIM_SAFE_PCT, ACID_EQUIPMENT_SAFE_PCT)
+            liquid_chlorine_cap_ml = self.liquid_chlorine_safe_volume(pool_V, local_config['bleach_percent'])
+            cal_hypo_cap_g = (pool_V / 1000) * CAL_HYPO_SPLIT_G_PER_1000L
+            builder.add_safety_limits(
+                self.fmt_acid(acid_cap_ml),
+                f"{liquid_chlorine_cap_ml:.0f} ml",
+                f"{cal_hypo_cap_g:.0f} g"
+            )
+
             # Detect SLAM context
             if is_slam_mode:
                 slam_context = 'during_slam'

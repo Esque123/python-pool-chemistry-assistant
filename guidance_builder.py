@@ -14,6 +14,7 @@ class OutputSection(Enum):
     """Enum defining all possible output sections in order of appearance"""
     HEADER = "header"
     PARAMETERS = "parameters"
+    SAFETY_LIMITS = "safety_limits"
     MODE = "mode"
     CHEMISTRY_ANALYSIS = "chemistry_analysis"
     SLAM_MAINTENANCE = "slam_maintenance"
@@ -34,6 +35,7 @@ class GuidanceBuilder:
     SECTION_ORDER = [
         OutputSection.HEADER,
         OutputSection.PARAMETERS,
+        OutputSection.SAFETY_LIMITS,
         OutputSection.MODE,
         OutputSection.CHEMISTRY_ANALYSIS,
         OutputSection.SLAM_MAINTENANCE,
@@ -49,6 +51,7 @@ class GuidanceBuilder:
     SECTION_EMOJIS = {
         OutputSection.HEADER: "",
         OutputSection.PARAMETERS: "",
+        OutputSection.SAFETY_LIMITS: "🛡️",
         OutputSection.MODE: "⚙️",
         OutputSection.CHEMISTRY_ANALYSIS: "📊",
         OutputSection.SLAM_DOSES: "⚡",
@@ -134,9 +137,24 @@ class GuidanceBuilder:
                 f"Parameters: {', '.join(param_parts)}"
             ]
             self._add_lines(OutputSection.PARAMETERS, lines)
-        
+
         return self
-    
+
+    def add_safety_limits(self, acid_cap_text: str, liquid_chlorine_cap_text: str, cal_hypo_cap_text: str):
+        """Add a standing, pool-size-aware safety reminder near the top of the report."""
+        lines = [
+            f"[SAFETY LIMITS] {self.SECTION_EMOJIS[OutputSection.SAFETY_LIMITS]}",
+            f"{'─'*47}",
+            f"   • Never add more than {acid_cap_text} HCl in one application — this pool's size caps any single dose there",
+            f"   • Outside an active SLAM shock, the same applies to chlorine: keep liquid chlorine under {liquid_chlorine_cap_text} and cal-hypo under {cal_hypo_cap_text} per dose — split anything larger into 2+ doses, a couple hours apart",
+            f"   • During an active SLAM shock, dosing the full chlorine amount at once is intentional — pre-dissolve cal-hypo in multiple buckets and broadcast widely",
+            f"   • Spread any chemical around the whole pool as you pour — never dump it in one spot",
+            f"   • HCl and liquid chlorine are already liquid — no need to pre-dissolve, just pour and spread",
+            f"   • Granular chlorine (cal-hypo) is not — always pre-dissolve it in a bucket of water before adding, regardless of amount",
+        ]
+        self._add_lines(OutputSection.SAFETY_LIMITS, lines)
+        return self
+
     def add_mode(self, mode: str):
         """Add operating mode section."""
         mode_display = {
