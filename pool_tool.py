@@ -3097,6 +3097,12 @@ class PoolChemistryApp:
             result['sections']['maintenance'].append("")
             result['sections']['maintenance'].append("🔧 SLAM MAINTENANCE:")
             result['sections']['maintenance'].append("   • Test FC every 2-4 hours")
+            if chlorine is None:
+                result['sections']['maintenance'].append("   • Test FC first — that tells you whether a pH test right now would even be reliable")
+            elif chlorine < 10:
+                result['sections']['maintenance'].append("   • Test pH too — FC is under 10 ppm so the reading is reliable; adjust toward 7.2-7.4 for best SLAM effectiveness")
+            else:
+                result['sections']['maintenance'].append("   • Skip pH for now — unreliable above 10 ppm FC; retest once FC drops below 10")
             result['sections']['maintenance'].append("   • Expect 2-4 ppm FC drop initially, decreasing as algae dies")
             result['sections']['maintenance'].append("   • Brush entire pool daily")
             result['sections']['maintenance'].append("   • Clean filter when pressure rises 25%")
